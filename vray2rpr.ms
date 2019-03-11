@@ -53,6 +53,33 @@ fn errorCatching functionName orig =(
 	out
 )
 
+fn createOSLInvertColor =(
+
+	osl_map = OSLMap()
+	osl_map.OSLPath = GetDir #maxroot + "OSL\\ColorComp.osl"
+	osl_map.OSLCode =  "// Complements a color.
+						// ColorComp.osl, by Zap Andersson
+						// Modified: 2018-02-08
+						// Copyright 2018 Autodesk Inc, All rights reserved. This file is licensed under Apache 2.0 license
+						//    https://github.com/ADN-DevTech/3dsMax-OSL-Shaders/blob/master/LICENSE.txt
+
+						shader ColorComp
+						[[ string help = \"Inverts (Complements) a color number (1 - Input)\",
+						   string label= \"Invert (color)\",
+						   string category = \"Math\Color\" ]]
+						(
+							color Input = 0.0,
+							output color Out = 0.0,
+						)
+						{
+							Out = 1 - Input;
+						}
+						"
+	osl_map.OSLAutoUpdate = true
+	
+	osl_map
+)
+
 fn convertUnsupportedMtl origMtl =(
 	r = RPR_Uber_Material()
 	r.name = origMtl.name + userPostfixStr
@@ -69,18 +96,8 @@ fn convertVrayMtl origMtl =(
 	-- diffuse
 	r.diffuseColor = origMtl.diffuse
 	r.diffuseColorTexmap = origMtl.texmap_diffuse
-	if useRoughness then (
-		r.diffuseRoughness = origMtl.diffuse_roughness
-		r.diffuseRoughnessTexmap = origMtl.texmap_roughness
-	) else (
-		r.diffuseRoughness = 1 - origMtl.diffuse_roughness
-		if origMtl.texmap_roughness != undefined do (
-			r.diffuseRoughnessTexmap = OSLMap()
-			r.diffuseRoughnessTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-			r.diffuseRoughnessTexmap.OSLAutoUpdate = true
-			r.diffuseRoughnessTexmap.input_map = origMtl.texmap_roughness
-		)
-	)
+	r.diffuseRoughness = origMtl.diffuse_roughness
+	r.diffuseRoughnessTexmap = origMtl.texmap_roughness
 	
 	-- reflection
 	if origMtl.reflection.red > 0 or origMtl.reflection.green > 0 or origMtl.reflection.blue > 0 do ( r.reflectionEnable = true )
@@ -92,10 +109,9 @@ fn convertVrayMtl origMtl =(
 	) else (
 		r.reflectionRoughness = 1 - origMtl.reflection_glossiness
 		if origMtl.texmap_reflectionGlossiness != undefined do (
-			r.reflectionRoughnessTexmap = OSLMap()
-			r.reflectionRoughnessTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-			r.reflectionRoughnessTexmap.OSLAutoUpdate = true
-			r.reflectionRoughnessTexmap.input_map = origMtl.texmap_reflectionGlossiness
+			osl_map = createOSLInvertColor()
+			osl_map.input_map = origMtl.texmap_reflectionGlossiness
+			r.reflectionRoughnessTexmap = osl_map
 		)
 	)
 	if origMtl.reflection_metalness > 0.01 do ( 
@@ -124,10 +140,9 @@ fn convertVrayMtl origMtl =(
 	) else (
 		r.refractionRoughness = 1 - origMtl.refraction_glossiness
 		if origMtl.texmap_refractionGlossiness != undefined do (
-			r.refractionRoughnessTexmap = OSLMap()
-			r.refractionRoughnessTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-			r.refractionRoughnessTexmap.OSLAutoUpdate = true
-			r.refractionRoughnessTexmap.input_map = origMtl.texmap_refractionGlossiness
+			osl_map = createOSLInvertColor()
+			osl_map.input_map = origMtl.texmap_refractionGlossiness
+			r.refractionRoughnessTexmap.input_map = osl_map
 		)
 	)
 	r.refractionIor = origMtl.refraction_ior
@@ -144,10 +159,9 @@ fn convertVrayMtl origMtl =(
 	r.emissiveIntensity = origMtl.selfIllumination_multiplier
 
 	if origMtl.texmap_opacity != undefined do (
-		r.TransparencyTexmap = OSLMap()
-		r.TransparencyTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-		r.TransparencyTexmap.OSLAutoUpdate = true
-		r.TransparencyTexmap.input_map = origMtl.texmap_opacity
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.texmap_opacity
+		r.TransparencyTexmap.input_map = osl_map
 	)
 
 	r
@@ -164,10 +178,9 @@ fn convertVRayCarPaintMtl origMtl =(
 	r.ReflectionWeightTexmap = origMtl.texmap_base_reflection
 	r.reflectionRoughness = 1 - origMtl.base_glossiness
 	if origMtl.texmap_base_glossiness != undefined do (
-		r.reflectionRoughnessTexmap = OSLMap()
-		r.reflectionRoughnessTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-		r.reflectionRoughnessTexmap.OSLAutoUpdate = true
-		r.reflectionRoughnessTexmap.input_map = origMtl.texmap_base_glossiness
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.texmap_base_glossiness
+		r.reflectionRoughnessTexmap.input_map = osl_map
 	)
 
 	r.CoatingEnable = true
@@ -177,10 +190,9 @@ fn convertVRayCarPaintMtl origMtl =(
 	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
 	r.CoatingRoughness = 1 - origMtl.coat_glossiness
 	if origMtl.texmap_coat_glossiness != undefined do (
-		r.CoatingRoughnessTexmap = OSLMap()
-		r.CoatingRoughnessTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-		r.CoatingRoughnessTexmap.OSLAutoUpdate = true
-		r.CoatingRoughnessTexmap.input_map = origMtl.texmap_coat_glossiness
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.texmap_coat_glossiness
+		r.CoatingRoughnessTexmap.input_map = osl_map
 	)
 
 	r
@@ -209,10 +221,9 @@ fn convertVRayLightMtl origMtl =(
 	r.emissiveIntensity = origMtl.multiplier
 
 	if origMtl.opacity_texmap != undefined do (
-		r.TransparencyTexmap = OSLMap()
-		r.TransparencyTexmap.OSLPath = "{85E076D5-DF8A-45F3-80F5-55FD1AC31AE7}"
-		r.TransparencyTexmap.OSLAutoUpdate = true
-		r.TransparencyTexmap.input_map = origMtl.opacity_texmap
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.opacity_texmap
+		r.TransparencyTexmap.input_map = osl_map
 	)
 
 	-- displacement
