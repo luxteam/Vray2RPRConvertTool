@@ -236,69 +236,67 @@ fn convertVRayLightMtl origMtl =(
 )
 
 fn convertVrayIES origLight = (
-	r=CoronaLight()
-	r.name=(if owner.converterSettings.addCoronaPrefix then owner.converterSettings.userPrefixStr else "") + origLight.name
+	r = ies_light()
+	r.name = origLight.name + userPostfixStr
 	
 	-- OnOff, Include/exclude
-	r.on = origLight.enabled
+	r.enabled = origLight.enabled
 	r.targeted = origLight.targeted
-	case of (
-		(origLight.includeList != undefined and origLight.includeList.count != 0): (
-			r.excludeIncludeMod = true
-			r.excludeList = origLight.includeList
-		)
-		(origLight.excludeList != undefined and origLight.excludeList.count != 0): (
-			r.excludeIncludeMod = false
-			r.excludeList = origLight.excludeList
-		)
-		default: ()
-	)
 	
+	-- ies file
+	r.profile = origLight.ies_file
+
+	-- location
+	r.rotationX = origLight.rotation_X
+	r.rotationY = origLight.rotation_Y
+	r.rotationZ = origLight.rotation_Z
+
 	-- Intensitiy, Color, Texmap
-	r.intensity = origLight.power
-	r.intensityUnits = 1 -- luminous (lm)
-	
-	
-	r.colorMode = origLight.color_mode -- 0: direct color, 1: kelvin temp
+	r.intensity = origLight.intensity_value
+	r.colorMode = origLight.color_mode
 	r.color = origLight.color
-	if r.colorMode == 1 do r.blackbodyTemp = origLight.color_temperature -- kelvin
-	
-	-- shape   -- 0: sphere, 1: Rectangle, 2: Disk, 3: Cylinder
-	case origLight.shape of (
-		0:( r.shape = 0 -- point
-			r.iesSharpnessFake = true
-			r.width = 5
-			r.height = 5
+	r.temperature = origLight.color_temperature
+
+	r
+)
+
+fn convertVrayLight origLight = (
+	light_type = origLight.type
+	if light_type != 1 then (
+		r = physical_light()
+		r.name = origLight.name + userPostfixStr
+		
+		-- OnOff, Include/exclude
+		r.enabled = origLight.on 
+		r.lightType = 0 -- area light
+
+		local areaShape = case light_type of (
+			0: 3
+			2: 2
+			3: 4
+			4: 0
+			default: 1
 		)
-		1:( r.shape = 1 -- Rectangle
-			r.width = if origLight.width != 0 then origLight.width else 5.0
-			r.height = if origLight.length != 0 then origLight.length else 5.0
+		r.areaShape = areaShape
+
+		r.colourMode = origLight.color_mode
+		r.colourPicker = origLight.color
+		r.temperature = origLight.color_temperature
+
+		if origLight.texmap != undefined and origLight.texmap_on == true do (
+			r.EnableMap = true
+			r.ColourMap = origLight.texmap
 		)
-		2:( r.shape = 2 -- circle
-			r.width = if origLight.diameter != 0 then origLight.diameter / 2.0 else 5.0
-		) 
-		3:( r.shape = 0 -- sphere 
-			r.width = if origLight.diameter != 0 then origLight.diameter / 2.0 else 5.0
-		) 
-		4:( r.shape = 2 -- vertical cylinder
-			r.width = if origLight.diameter != 0 then origLight.diameter / 2.0 else 5.0
-		) 
-		default:(
-			r.shape = 0 -- for everything else
-			r.iesSharpnessFake = true
-			r.width = 5
-			r.height = 5
+
+	) else (
+		r = "env"
+		renderers.current.backgroundOverride = true
+		renderers.current.backgroundType = 0
+		if origLight.texmap != undefined and origLight.texmap_on == true do (
+			renderers.current.useBackgroundMap = True
+    		renderers.current.backgroundMap =  origLight.texmap
 		)
-	)
-	
-	-- visibility
-	r.visibleDirectly = false
-	r.occludeOtherLights = origLight.castShadows
-	
-	-- IES
-		r.iesOn = true
-	if origLight.ies_file != undefined do(
-		r.iesFile = origLight.ies_file
+    	
 	)
 	
 	r
@@ -312,8 +310,8 @@ fn convertLights orig_light =(
 	
 	cls=classof orig_light
 	local new_light=case cls of (
-		--VrayLight: errorCatching convertVrayLight orig_light 
-		--VRayIES: errorCatching convertVrayIES orig_light 
+		VrayLight: errorCatching convertVrayLight orig_light 
+		VRayIES: errorCatching convertVrayIES orig_light 
 		--VraySun: errorCatching convertVraySun orig_light 
 		--VRayAmbientLight: errorCatching convertVRayAmbientLight orig_light 
 		
@@ -470,6 +468,11 @@ fn convertVrayMaterial orig_mtl processMaps:true =(
 )
 
 fn cleanUpConversionData =(
+
+	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
+	delete (for elem in orig_mtls where (superclassof elem == material) and isvalidnode elem collect elem) 
+	delete (for elem in orig_maps collect elem) 
+
 	orig_mtls=#()
 	new_mtls=#()
 	orig_maps=#()
@@ -514,20 +517,18 @@ fn convertScene =(
 	allLights = for o in objects where superclassof o == light collect o
 	for i in allLights do(
 		if isValidNode i do(
-			print(i)
 			if i.parent != undefined and classof i.parent == DaylightAssemblyHead then() else(
 				newLight = convertLights i
-				replaceInstances i newLight
+				if newLight != "env" do (
+					replaceInstances i newLight
+				)
 			)
 		)
 	)
-	
-	-- ???
-	--delete (for elem in converterTempData.new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 			
 	end = timeStamp()
 	print("Scene conversion took " +  ((end - start) / 1000.0) as string + " seconds ")
-	print("Converted: " + new_mtls.count as string + " materials and " + new_maps.count as string + " utilities.")
+	print("Converted: " + new_mtls.count as string + " materials and " + new_maps.count as string + " utilities + " + new_lights.count as string + " lights.")
 
 	renderers.current = Radeon_ProRender()
 	cleanUpConversionData()
