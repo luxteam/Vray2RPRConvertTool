@@ -17,6 +17,10 @@
 	- VrayBump2Normal
 	- VrayColor
 
+	Supported lights:
+	- VrayLight
+	- VrayIES
+
 */
 
 supportedMtlClasses = #("VRayMtlWrapper", "VRayMtl", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
@@ -238,13 +242,17 @@ fn convertVRayLightMtl origMtl =(
 fn convertVrayIES origLight = (
 	r = ies_light()
 	r.name = origLight.name + userPostfixStr
+
+	-- position
+	r.pos = origLight.pos
+	r.scale = origLight.scale
 	
 	-- OnOff, Include/exclude
 	r.enabled = origLight.enabled
 	r.targeted = origLight.targeted
 	
 	-- ies file
-	r.profile = origLight.ies_file
+	--r.profile = origLight.ies_file
 
 	-- location
 	r.rotationX = origLight.rotation_X
@@ -266,23 +274,38 @@ fn convertVrayLight origLight = (
 		r = physical_light()
 		r.name = origLight.name + userPostfixStr
 		
+		-- position
+		r.pos = origLight.pos
+		r.scale = origLight.scale
+		r.rotation = origLight.rotation
+
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
+		if origLight.invisible then ( r.isVisible = false ) else ( r.isVisible = true ) -- visible
 		r.lightType = 0 -- area light
 
 		local areaShape = case light_type of (
-			0: 3
-			2: 2
-			3: 4
-			4: 0
+			0: 3 -- Plane
+			2: 2 -- Sphere
+			3: 4 -- Mesh
+			4: 0 -- Disc
 			default: 1
 		)
 		r.areaShape = areaShape
 
+		r.LightIntensity = origLight.multiplier
 		r.colourMode = origLight.color_mode
 		r.colourPicker = origLight.color
 		r.temperature = origLight.color_temperature
 
+		if areaShape == 2 or areaShape == 0 do (
+			r.areaWidths = origLight.size0
+		)
+		if areaShape == 3 do (
+			r.areaWidths = origLight.size1
+			r.areaLength = origLight.sizeLength
+		)
+		
 		if origLight.texmap != undefined and origLight.texmap_on == true do (
 			r.EnableMap = true
 			r.ColourMap = origLight.texmap
@@ -290,13 +313,16 @@ fn convertVrayLight origLight = (
 
 	) else (
 		r = "env"
-		renderers.current.backgroundOverride = true
-		renderers.current.backgroundType = 0
-		if origLight.texmap != undefined and origLight.texmap_on == true do (
-			renderers.current.useBackgroundMap = True
-    		renderers.current.backgroundMap =  origLight.texmap
-		)
-    	
+		if origLight.on do (
+			renderers.current.backgroundOverride = true
+			renderers.current.backgroundType = 0
+			if origLight.texmap != undefined and origLight.texmap_on == true do (
+				renderers.current.useBackgroundMap = True
+	    		renderers.current.backgroundMap =  origLight.texmap
+			)
+	    	renderers.current.backgroundIntensity = origLight.multiplier
+	    	renderers.current.backgroundColor = origLight.color
+	    )
 	)
 	
 	r
@@ -470,8 +496,6 @@ fn convertVrayMaterial orig_mtl processMaps:true =(
 fn cleanUpConversionData =(
 
 	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
-	delete (for elem in orig_mtls where (superclassof elem == material) and isvalidnode elem collect elem) 
-	delete (for elem in orig_maps collect elem) 
 
 	orig_mtls=#()
 	new_mtls=#()
@@ -528,7 +552,7 @@ fn convertScene =(
 			
 	end = timeStamp()
 	print("Scene conversion took " +  ((end - start) / 1000.0) as string + " seconds ")
-	print("Converted: " + new_mtls.count as string + " materials and " + new_maps.count as string + " utilities + " + new_lights.count as string + " lights.")
+	print("Converted: " + new_mtls.count as string + " materials, " + new_maps.count as string + " utilities and " + new_lights.count as string + " lights.")
 
 	renderers.current = Radeon_ProRender()
 	cleanUpConversionData()
