@@ -161,6 +161,7 @@ fn convertVrayMtl origMtl =(
 	r.emissiveColor = origMtl.selfIllumination
 	r.emissiveColorTexmap = origMtl.texmap_self_illumination
 	r.emissiveIntensity = origMtl.selfIllumination_multiplier
+	r.emissiveWeight = 0.65
 
 	if origMtl.texmap_opacity != undefined do (
 		osl_map = createOSLInvertColor()
@@ -281,7 +282,7 @@ fn convertVrayLight origLight = (
 
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
-		if origLight.invisible then ( r.isVisible = false ) else ( r.isVisible = true ) -- visible
+		if origLight.invisible then ( r.isVisible = true ) else ( r.isVisible = false ) -- visible
 		r.lightType = 0 -- area light
 
 		local areaShape = case light_type of (
@@ -314,18 +315,36 @@ fn convertVrayLight origLight = (
 	) else (
 		r = "env"
 		if origLight.on do (
-			renderers.current.backgroundOverride = true
-			renderers.current.backgroundType = 0
+			rpr = Radeon_ProRender()
+			rpr.backgroundOverride = true
+			rpr.backgroundType = 0
 			if origLight.texmap != undefined and origLight.texmap_on == true do (
-				renderers.current.useBackgroundMap = True
-	    		renderers.current.backgroundMap =  origLight.texmap
+				rpr.useBackgroundMap = True
+	    		rpr.backgroundMap =  origLight.texmap
 			)
-	    	renderers.current.backgroundIntensity = origLight.multiplier
-	    	renderers.current.backgroundColor = origLight.color
+	    	rpr.backgroundIntensity = origLight.multiplier
+	    	rpr.backgroundColor = origLight.color
 	    )
 	)
 	
 	r
+)
+
+fn convertVraySun origLight = (
+	r = "env"
+	
+	if origLight.enabled do (
+		rpr = Radeon_ProRender()
+		rpr.backgroundOverride = true
+		rpr.backgroundType = 1
+		rpr.backgroundSkyType = 0
+		rpr.backgroundSkyHaze = origLight.turbidity
+		rpr.backgroundSkyFilterColor = origLight.filter_color
+		rpr.backgroundSkySunDisc = origLight.size_multiplier
+		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
+		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 49.5
+    )
+    r
 )
 
 fn convertLights orig_light =(
@@ -338,7 +357,7 @@ fn convertLights orig_light =(
 	local new_light=case cls of (
 		VrayLight: errorCatching convertVrayLight orig_light 
 		VRayIES: errorCatching convertVrayIES orig_light 
-		--VraySun: errorCatching convertVraySun orig_light 
+		VraySun: errorCatching convertVraySun orig_light 
 		--VRayAmbientLight: errorCatching convertVRayAmbientLight orig_light 
 		
 		
@@ -386,11 +405,28 @@ fn convertVrayBump2Normal origMap = (
 	r
 )
 
+fn convertVrayDirt origMap = (
+	if origMap.mode == 0 then (
+		r = RPR_Ambient_Occlusion()
+		r.name = origMap.name + userPostfixStr
+		
+		r.unoccluded_Color = origMap.unoccluded_color
+		r.occluded_Color = origMap.occluded_color
+		r.color0Texmap = origMap.texmap_unoccluded_color
+		r.color1Texmap = origMap.texmap_occluded_color
+		r.radius = origMap.radius
+		
+		r
+	) else (
+		origMap
+	)	
+)
+
 fn convertVrayColor origMap = (
-	r = RPR_Arithmetic()
+	r = RPR_Color_Value()
 	r.name = origMap.name + userPostfixStr
 	
-	r.Color1 = color origMap.red origMap.green origMap.blue 
+	r.color = color origMap.red origMap.green origMap.blue 
 	
 	r
 )
@@ -416,7 +452,8 @@ fn convertVrayUtilities orig_map =(
 		VrayCompTex: errorCatching convertVrayCompTex orig_map
 		VrayColor: errorCatching convertVrayColor orig_map
 		VrayBump2Normal: errorCatching convertVrayBump2Normal orig_map
-		--VrayNormalMap: errorCatching convertFrom_VrayNormalMap orig_map
+		VrayDirt: errorCatching convertVrayDirt orig_map
+		--VrayNormalMap: errorCatching convererrorCatching convertVrayBump2Normal orig_maptFrom_VrayNormalMap orig_map
 		--VRayHDRI: (if converterSettings.VrayHDRIToBitmaptexture then errorCatching convertFrom_VrayHDRI orig_map else orig_map)
 		
 		default: orig_map
