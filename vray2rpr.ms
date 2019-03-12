@@ -253,7 +253,13 @@ fn convertVrayIES origLight = (
 	r.targeted = origLight.targeted
 	
 	-- ies file
-	--r.profile = origLight.ies_file
+	plugcfg = GetDir #plugcfg
+	profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
+	makeDir (profile_path)
+	ies_file = origLight.ies_file
+	ies_name = (filterString ies_file "\\")[ies_name.count]
+	copyFile (ies_file) (profile_path + ies_name)
+	r.profile = ies_name
 
 	-- location
 	r.rotationX = origLight.rotation_X
