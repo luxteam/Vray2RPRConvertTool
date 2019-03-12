@@ -445,6 +445,31 @@ fn convertVrayBump2Normal origMap = (
 	r
 )
 
+fn convertVrayNormalMap origMap = (
+	r = RPR_Normal()
+	r.name = origMap.name + userPostfixStr
+	
+	if origMap.normal_map_on and not origMap.bump_map_on do (
+		r.isBump = false
+		r.map = origMap.normal_map
+		r.strength = origMap.normal_map_multiplier  
+	)
+
+	if not origMap.normal_map_on and origMap.bump_map_on do (
+		r.isBump = true
+		r.map = origMap.bump_map 
+		r.strength = origMap.bump_map_mult 
+	)
+
+	if origMap.normal_map_on and origMap.bump_map_on do (
+		r.isBump = false
+		r.map = origMap.normal_map
+		r.strength = origMap.normal_map_multiplier  
+	)
+
+	r
+)
+
 fn convertVrayDirt origMap = (
 	if origMap.mode == 0 then (
 		r = RPR_Ambient_Occlusion()
@@ -493,7 +518,7 @@ fn convertVrayUtilities orig_map =(
 		VrayColor: errorCatching convertVrayColor orig_map
 		VrayBump2Normal: errorCatching convertVrayBump2Normal orig_map
 		VrayDirt: errorCatching convertVrayDirt orig_map
-		--VrayNormalMap: errorCatching convererrorCatching convertVrayBump2Normal orig_maptFrom_VrayNormalMap orig_map
+		VrayNormalMap: errorCatching convertVrayNormalMap orig_map
 		--VRayHDRI: (if converterSettings.VrayHDRIToBitmaptexture then errorCatching convertFrom_VrayHDRI orig_map else orig_map)
 		
 		default: orig_map
