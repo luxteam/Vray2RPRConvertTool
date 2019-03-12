@@ -37,6 +37,8 @@ orig_maps=#()
 new_maps=#()
 orig_lights=#()
 new_lights=#()
+orig_cameras=#()
+new_cameras=#()
 
 useTryCatchBugReporting = true
 userPostfixStr = "_rpr"
@@ -243,10 +245,6 @@ fn convertVRayLightMtl origMtl =(
 fn convertVrayIES origLight = (
 	r = ies_light()
 	r.name = origLight.name + userPostfixStr
-
-	-- position
-	r.pos = origLight.pos
-	r.scale = origLight.scale
 	
 	-- OnOff, Include/exclude
 	r.enabled = origLight.enabled
@@ -280,15 +278,10 @@ fn convertVrayLight origLight = (
 	if light_type != 1 then (
 		r = physical_light()
 		r.name = origLight.name + userPostfixStr
-		
-		-- position
-		r.pos = origLight.pos
-		r.scale = origLight.scale
-		r.rotation = origLight.rotation
 
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
-		if origLight.invisible then ( r.isVisible = true ) else ( r.isVisible = false ) -- visible
+		if origLight.invisible then ( r.isVisible = false ) else ( r.isVisible = true ) -- visible
 		r.lightType = 0 -- area light
 
 		local areaShape = case light_type of (
@@ -376,6 +369,47 @@ fn convertLights orig_light =(
 	)
 	
 	new_light
+)
+
+fn convertVRayPhysicalCamera origCamera =(
+
+	r = Freecamera()
+	r.name = origCamera.name + userPostfixStr
+
+	r.targetDistance = origCamera.target_distance
+	r.showCone = origCamera.show_camera_cone
+	r.fov = origCamera.fov
+	r.mpassEffect.useTargetDistance = origCamera.use_dof
+	r.clipManually = origCamera.clip_on
+	r.nearclip = origCamera.clip_near
+	r.farclip = origCamera.clip_far
+	r.nearrange = origCamera.environment_near
+	r.farrange = origCamera.environment_far
+
+	r
+
+)
+
+fn convertCameras orig_camera =(
+	if ((superclassof orig_camera)!=camera) then return orig_camera 
+	
+	local i=findItem orig_cameras orig_camera 
+	if i>0 then return new_cameras[i]  
+	
+	cls=classof orig_camera
+	local new_camera=case cls of (
+		--VRayDomeCamera: errorCatching convertVRayDomeCamera orig_camera 
+		VRayPhysicalCamera: errorCatching convertVRayPhysicalCamera orig_camera 
+
+		default: orig_camera
+	)
+	
+	if new_camera != orig_camera then ( 
+		append orig_cameras orig_camera
+		append new_cameras new_camera
+	)
+	
+	new_camera
 )
 
 fn convertVrayCompTex origMap = (
@@ -538,7 +572,8 @@ fn convertVrayMaterial orig_mtl processMaps:true =(
 
 fn cleanUpConversionData =(
 
-	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
+	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
+	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
 
 	orig_mtls=#()
 	new_mtls=#()
@@ -546,6 +581,8 @@ fn cleanUpConversionData =(
 	new_maps=#()
 	orig_lights=#()
 	new_lights=#()
+	orig_cameras=#()
+	new_cameras=#()
 	
 	clearUndoBuffer()
 	true
@@ -591,6 +628,13 @@ fn convertScene =(
 				)
 			)
 		)
+	)
+
+	-- camera conversion
+	allCameras = for o in objects where superclassof o == camera collect o
+	for i in allCameras do(
+		newCamera = convertCameras i
+		replaceInstances i newCamera	
 	)
 			
 	end = timeStamp()
