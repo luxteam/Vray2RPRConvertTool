@@ -667,6 +667,8 @@ fn convertScene =(
 	print("Converted: " + new_mtls.count as string + " materials, " + new_maps.count as string + " utilities and " + new_lights.count as string + " lights.")
 
 	renderers.current = Radeon_ProRender()
+	renderers.current.raycastEpsilon = 0.001
+
 	cleanUpConversionData()
 	
 )
