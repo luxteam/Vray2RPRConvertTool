@@ -140,16 +140,11 @@ fn convertVrayMtl origMtl =(
 	if origMtl.refraction.red > 0 or origMtl.refraction.green > 0 or origMtl.refraction.blue > 0 do ( r.refractionEnable = true )
 	r.refractionColor = origMtl.refraction
 	r.refractionColorTexmap = origMtl.texmap_refraction
-	if useRoughness then (
-		r.refractionRoughness = origMtl.refraction_glossiness
-		r.refractionRoughnessTexmap = origMtl.texmap_refractionGlossiness
-	) else (
-		r.refractionRoughness = 1 - origMtl.refraction_glossiness
-		if origMtl.texmap_refractionGlossiness != undefined do (
-			osl_map = createOSLInvertColor()
-			osl_map.input_map = origMtl.texmap_refractionGlossiness
-			r.refractionRoughnessTexmap.input_map = osl_map
-		)
+	r.refractionRoughness = 1 - origMtl.refraction_glossiness
+	if origMtl.texmap_refractionGlossiness != undefined do (
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.texmap_refractionGlossiness
+		r.refractionRoughnessTexmap.input_map = osl_map
 	)
 	r.refractionIor = origMtl.refraction_ior
 	r.refractionIorTexmap = origMtl.texmap_refractionIOR
