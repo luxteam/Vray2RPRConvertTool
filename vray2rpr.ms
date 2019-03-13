@@ -378,7 +378,9 @@ fn convertVRayPhysicalCamera origCamera =(
 
 	r.targetDistance = origCamera.target_distance
 	r.showCone = origCamera.show_camera_cone
-	r.fov = origCamera.fov
+	if origCamera.specify_fov do (
+		r.fov = origCamera.fov
+	)
 	r.mpassEffect.useTargetDistance = origCamera.use_dof
 	r.clipManually = origCamera.clip_on
 	r.nearclip = origCamera.clip_near
@@ -496,6 +498,57 @@ fn convertVrayColor origMap = (
 	r
 )
 
+fn convertVRayHDRI origMap = (
+	r = BitmapTexture()
+	r.name = origMap.name
+	
+	-- filename, output
+	if origMap.HDRIMapName != "" and origMap.HDRIMapName != undefined do(
+		r.fileName = origMap.HDRIMapName
+	)
+	
+	r.output = origMap.Output
+	if hasproperty origMap #coords then(
+		r.coords = origMap.coords
+	)
+	
+	-- Gamma handling
+	if origMap.gamma != 1 do(
+		r.bitmap = openBitmap r.bitmap.filename gamma:(1.0/origMap.gamma)
+	)
+	
+	if origMap.mapType == 2 then(   -- spherical mode
+		r.coords.mapping = 0 -- spherical
+		r.coords.mappingType = 1 -- Environ
+		r.coords.U_Offset = 0.25 + origMap.horizontalRotation / 360.0
+		r.coords.V_Offset = origMap.verticalRotation / 180.0
+		
+		if origMap.horizontalFlip then(
+			r.coords.U_Offset = 0.25 - origMap.horizontalRotation / 360.0
+			r.coords.U_Tiling = -r.coords.U_Tiling
+		)
+		if origMap.verticalFlip then r.coords.V_Tiling = -r.coords.V_Tiling
+	)
+	
+	-- alpha source, mono channel out, rgb channel out
+	r.alphaSource = origMap.alphaSource
+	r.monoOutput = origMap.monoOutput
+	r.rgbOutput = if origMap.rgbOutput > 1 then 0 else origMap.rgbOutput
+	
+	-- crop/place
+	r.apply = origMap.cropplace_on
+	r.cropPlace = origMap.cropplace_mode
+	r.clipu = origMap.cropplace_u
+	r.clipv = origMap.cropplace_v
+	r.clipw = origMap.cropplace_width
+	r.cliph = origMap.cropplace_height
+	
+	r.output.output_amount *= origMap.multiplier * origMap.renderMultiplier
+	
+	r
+	
+)
+
 fn convertVrayUtilities orig_map =(
 	if ((superclassof orig_map)!=textureMap) then return orig_map  -- check if this is a material; if not, just return the value
 	
@@ -519,7 +572,7 @@ fn convertVrayUtilities orig_map =(
 		VrayBump2Normal: errorCatching convertVrayBump2Normal orig_map
 		VrayDirt: errorCatching convertVrayDirt orig_map
 		VrayNormalMap: errorCatching convertVrayNormalMap orig_map
-		--VRayHDRI: (if converterSettings.VrayHDRIToBitmaptexture then errorCatching convertFrom_VrayHDRI orig_map else orig_map)
+		VRayHDRI: errorCatching convertVRayHDRI orig_map
 		
 		default: orig_map
 	)
