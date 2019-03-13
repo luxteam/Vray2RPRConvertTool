@@ -5,6 +5,9 @@
 
 	History:
 	v.1.0 - first release
+	v.1.1 - VrayDirt, VrayNormalMap 
+	v.1.2 - VraySun, VrayPhysicalCamera
+	v.1.3 - VrayHDRI
 
 	Supported materials:
 	- VrayMtl
@@ -16,20 +19,19 @@
 	- VrayComptex
 	- VrayBump2Normal
 	- VrayColor
+	- VrayDirt
+	- VrayNormalMap
+	- VrayHDRI
 
 	Supported lights:
 	- VrayLight
 	- VrayIES
+	- VraySun
+
+	Supported cameras:
+	- VrayPhysicalCamera
 
 */
-
-supportedMtlClasses = #("VRayMtlWrapper", "VRayMtl", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
-	"VRayBlendMtl", "VRayBumpMtl", "VRayCarPaintMtl", "VRayFlakesMtl", "VRayFastSSS2", "VRayScatterVolume", \
-	"VRayOverrideMtl", "VRayGLSLMtl", "VRayHairMtl", "VRayHairNextMtl", "VRayMDLMtl", "VRayOSLMtl", "VRayPluginNodeMtl", \
-	"VRayPointParticleMtl", "VRayScannedMtl", "VRayStochasticFlakesMtl", "VRaySwitchMtl", "VRayVectorDisplBake", "VRayVRmatMtl")
-
-supportedMapClasses = #("VrayColor", "VrayDirt", "VrayBump2Normal", "VrayNormalMap", "VraySky", \
-	"VRayCompTex", "VRayEdgesTex", "VRayGLSLTex", "VRaySoftbox", "VRayHDRI")
 
 orig_mtls=#()
 new_mtls=#()
@@ -40,22 +42,20 @@ new_lights=#()
 orig_cameras=#()
 new_cameras=#()
 
-useTryCatchBugReporting = true
-userPostfixStr = "_rpr"
+unsupportedPostfixStr = "_unsupported"
+rprPostfixStr = "_rpr"
 
 fn errorCatching functionName orig =(
 	errcls = classof orig
-	if useTryCatchBugReporting then(
-		try(
-			out = functionName orig
-		)catch(
-			print ("Error occured in " + errcls as string + " : " + orig as string + "\r\n" + getCurrentException() ) 
-			print ("Stack trace: " + getCurrentExceptionStackTrace())
-			out = orig
-		)
-	)else(
+	
+	try(
 		out = functionName orig
+	)catch(
+		print ("Error occured in " + errcls as string + " : " + orig as string + "\r\n" + getCurrentException() ) 
+		print ("Stack trace: " + getCurrentExceptionStackTrace())
+		out = orig
 	)
+	
 	out
 )
 
@@ -88,14 +88,20 @@ fn createOSLInvertColor =(
 
 fn convertUnsupportedMtl origMtl =(
 	r = RPR_Uber_Material()
-	r.name = origMtl.name + userPostfixStr
+	r.name = origMtl.name + unsupportedPostfixStr
 	r.diffuseColor = color 0 45 0
+	r
+)
+
+fn convertUnsupportedUtility origMtl =(
+	r = RPR_Arithmetic()
+	r.name = origMtl.name + unsupportedPostfixStr
 	r
 )
 
 fn convertVrayMtl origMtl =(
 	r = RPR_Uber_Material()
-	r.name = origMtl.name + userPostfixStr
+	r.name = origMtl.name + rprPostfixStr
 
 	useRoughness = origMtl.brdf_useRoughness
 
@@ -166,12 +172,17 @@ fn convertVrayMtl origMtl =(
 		r.TransparencyTexmap.input_map = osl_map
 	)
 
+	if origMtl.texmap_bump_on do (
+		r.normalEnable = true
+		r.normalTexmap = origMtl.texmap_bump
+	)
+
 	r
 )
 
-fn convertVRayCarPaintMtl origMtl =(
+fn convertVrayCarPaintMtl origMtl =(
 	r = RPR_Uber_Material()
-	r.name = origMtl.name + userPostfixStr
+	r.name = origMtl.name + rprPostfixStr
 
 	r.diffuseColor = origMtl.base_color
 	
@@ -200,9 +211,9 @@ fn convertVRayCarPaintMtl origMtl =(
 	r
 )
 
-fn convertVRayBlendMtl origMtl =(
+fn convertVrayBlendMtl origMtl =(
 	r = RPR_Blend_Material()
-	r.name = origMtl.name + userPostfixStr
+	r.name = origMtl.name + rprPostfixStr
 
 	r.material1 = origMtl.baseMtl
 	r.material2 = origMtl.coatMtl[1]
@@ -212,9 +223,9 @@ fn convertVRayBlendMtl origMtl =(
 	r
 )
 
-fn convertVRayLightMtl origMtl =(
+fn convertVrayLightMtl origMtl =(
 	r = RPR_Uber_Material()
-	r.name = origMtl.name + userPostfixStr
+	r.name = origMtl.name + rprPostfixStr
 
 	-- emission
 	if origMtl.color.red > 0 or origMtl.color.green > 0 or origMtl.color.blue > 0 do ( r.emissiveEnable = true )
@@ -239,20 +250,22 @@ fn convertVRayLightMtl origMtl =(
 
 fn convertVrayIES origLight = (
 	r = ies_light()
-	r.name = origLight.name + userPostfixStr
+	r.name = origLight.name + rprPostfixStr
 	
 	-- OnOff, Include/exclude
 	r.enabled = origLight.enabled
 	r.targeted = origLight.targeted
 	
 	-- ies file
-	plugcfg = GetDir #plugcfg
-	profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
-	makeDir (profile_path)
-	ies_file = origLight.ies_file
-	ies_name = (filterString ies_file "\\")[ies_name.count]
-	copyFile (ies_file) (profile_path + ies_name)
-	r.profile = ies_name
+	if origLight.ies_file != "" and origLight.ies_file != undefined do (
+		plugcfg = GetDir #plugcfg
+		profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
+		makeDir (profile_path)
+		ies_file = origLight.ies_file
+		ies_name = (filterString ies_file "\\")[ies_name.count]
+		copyFile (ies_file) (profile_path + ies_name)
+		r.profile = ies_name
+	)
 
 	-- location
 	r.rotationX = origLight.rotation_X
@@ -272,7 +285,7 @@ fn convertVrayLight origLight = (
 	light_type = origLight.type
 	if light_type != 1 then (
 		r = physical_light()
-		r.name = origLight.name + userPostfixStr
+		r.name = origLight.name + rprPostfixStr
 
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
@@ -338,7 +351,20 @@ fn convertVraySun origLight = (
 		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
 		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 49.5
     )
+
+	-- clean scene
+	delete origLight
+
     r
+)
+
+fn convertVrayAmbientLight origLight = (
+
+	-- clean scene
+	delete origLight
+
+	r = "env"
+	r
 )
 
 fn convertLights orig_light =(
@@ -350,9 +376,9 @@ fn convertLights orig_light =(
 	cls=classof orig_light
 	local new_light=case cls of (
 		VrayLight: errorCatching convertVrayLight orig_light 
-		VRayIES: errorCatching convertVrayIES orig_light 
+		VrayIES: errorCatching convertVrayIES orig_light 
 		VraySun: errorCatching convertVraySun orig_light 
-		--VRayAmbientLight: errorCatching convertVRayAmbientLight orig_light 
+		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
 		
 		
 		default: orig_light
@@ -366,10 +392,10 @@ fn convertLights orig_light =(
 	new_light
 )
 
-fn convertVRayPhysicalCamera origCamera =(
+fn convertVrayPhysicalCamera origCamera =(
 
 	r = Freecamera()
-	r.name = origCamera.name + userPostfixStr
+	r.name = origCamera.name + rprPostfixStr
 
 	r.targetDistance = origCamera.target_distance
 	r.showCone = origCamera.show_camera_cone
@@ -384,7 +410,14 @@ fn convertVRayPhysicalCamera origCamera =(
 	r.farrange = origCamera.environment_far
 
 	r
+)
 
+fn convertVrayDomeCamera origCamera =(
+
+	r = Freecamera()
+	r.name = origCamera.name + rprPostfixStr
+
+	r
 )
 
 fn convertCameras orig_camera =(
@@ -395,8 +428,8 @@ fn convertCameras orig_camera =(
 	
 	cls=classof orig_camera
 	local new_camera=case cls of (
-		--VRayDomeCamera: errorCatching convertVRayDomeCamera orig_camera 
-		VRayPhysicalCamera: errorCatching convertVRayPhysicalCamera orig_camera 
+		VrayDomeCamera: errorCatching convertVrayDomeCamera orig_camera 
+		VrayPhysicalCamera: errorCatching convertVrayPhysicalCamera orig_camera 
 
 		default: orig_camera
 	)
@@ -411,7 +444,7 @@ fn convertCameras orig_camera =(
 
 fn convertVrayCompTex origMap = (
 	r = RPR_Arithmetic()
-	r.name = origMap.name + userPostfixStr
+	r.name = origMap.name + rprPostfixStr
 	
 	r.color0texmap = origMap.sourceA 
 	r.color1texmap = origMap.sourceB 
@@ -433,7 +466,7 @@ fn convertVrayCompTex origMap = (
 
 fn convertVrayBump2Normal origMap = (
 	r = RPR_Normal()
-	r.name = origMap.name + userPostfixStr
+	r.name = origMap.name + rprPostfixStr
 	
 	r.isBump = true
 	r.map = origMap.bump_map 
@@ -444,7 +477,7 @@ fn convertVrayBump2Normal origMap = (
 
 fn convertVrayNormalMap origMap = (
 	r = RPR_Normal()
-	r.name = origMap.name + userPostfixStr
+	r.name = origMap.name + rprPostfixStr
 	
 	if origMap.normal_map_on and not origMap.bump_map_on do (
 		r.isBump = false
@@ -470,7 +503,7 @@ fn convertVrayNormalMap origMap = (
 fn convertVrayDirt origMap = (
 	if origMap.mode == 0 then (
 		r = RPR_Ambient_Occlusion()
-		r.name = origMap.name + userPostfixStr
+		r.name = origMap.name + rprPostfixStr
 		
 		r.unoccluded_Color = origMap.unoccluded_color
 		r.occluded_Color = origMap.occluded_color
@@ -486,14 +519,14 @@ fn convertVrayDirt origMap = (
 
 fn convertVrayColor origMap = (
 	r = RPR_Color_Value()
-	r.name = origMap.name + userPostfixStr
+	r.name = origMap.name + rprPostfixStr
 	
 	r.color = origMap.color 
 	
 	r
 )
 
-fn convertVRayHDRI origMap = (
+fn convertVrayHDRI origMap = (
 	r = BitmapTexture()
 	r.name = origMap.name
 	
@@ -567,7 +600,30 @@ fn convertVrayUtilities orig_map =(
 		VrayBump2Normal: errorCatching convertVrayBump2Normal orig_map
 		VrayDirt: errorCatching convertVrayDirt orig_map
 		VrayNormalMap: errorCatching convertVrayNormalMap orig_map
-		VRayHDRI: errorCatching convertVRayHDRI orig_map
+		VrayHDRI: errorCatching convertVrayHDRI orig_map
+
+		VrayColor2Bump: errorCatching convertUnsupportedUtility orig_map
+		VrayCurvature: errorCatching convertUnsupportedUtility orig_map
+		VrayDistanceTex: errorCatching convertUnsupportedUtility orig_map
+		VrayEdgesTex: errorCatching convertUnsupportedUtility orig_map
+		VrayFakeFresnelTex: errorCatching convertUnsupportedUtility orig_map
+		VrayGLSLTex: errorCatching convertUnsupportedUtility orig_map
+		VrayHairInfoTex: errorCatching convertUnsupportedUtility orig_map
+		VrayICC: errorCatching convertUnsupportedUtility orig_map
+		VrayLut: errorCatching convertUnsupportedUtility orig_map
+		VrayMultiSubTex: errorCatching convertUnsupportedUtility orig_map
+		VrayNoiseTex: errorCatching convertUnsupportedUtility orig_map
+		VrayOCIO: errorCatching convertUnsupportedUtility orig_map
+		VrayOSLText: errorCatching convertUnsupportedUtility orig_map
+		VrayParticleTex: errorCatching convertUnsupportedUtility orig_map
+		VrayPluginNodeTex: errorCatching convertUnsupportedUtility orig_map
+		VrayPtex: errorCatching convertUnsupportedUtility orig_map
+		VraySamplerInfoTex: errorCatching convertUnsupportedUtility orig_map
+		VraySky: errorCatching convertUnsupportedUtility orig_map
+		VraySoftbox: errorCatching convertUnsupportedUtility orig_map
+		VrayTriplanarTex: errorCatching convertUnsupportedUtility orig_map
+		VrayUserColor: errorCatching convertUnsupportedUtility orig_map
+		VrayUserScalar: errorCatching convertUnsupportedUtility orig_map
 		
 		default: orig_map
 	)
@@ -579,8 +635,7 @@ fn convertVrayUtilities orig_map =(
 	new_map
 )
 
-fn convertVrayMaterial orig_mtl processMaps:true =(
-	if ((superclassof orig_mtl)!=material) then return orig_mtl  -- check if this is a material; if not, just return the value
+fn convertVrayMaterial orig_mtl =(
 	
 	local i=findItem orig_mtls orig_mtl -- check if we have already converted this material
 	if i>0 then return new_mtls[i]  --if yes, just return the already converted one	
@@ -589,48 +644,46 @@ fn convertVrayMaterial orig_mtl processMaps:true =(
 	local sub_count=getNumSubMtls orig_mtl
 	if sub_count >= 1 then (
 		for i=1 to sub_count do (
-			setSubMtl orig_mtl i (convertVrayMaterial (getSubMtl orig_mtl i) processMaps:processMaps )
+			setSubMtl orig_mtl i (convertVrayMaterial (getSubMtl orig_mtl i))
 		)
 	)
 
-	if processMaps do( -- check if there are maps in this material and recurse into all subtexmaps
-		local sub_count=getNumSubTexmaps orig_mtl
-		if sub_count >= 1 then (
-			for i=1 to sub_count do (
-				newMap = convertVrayUtilities (getSubTexmap orig_mtl i)
-				setSubTexmap orig_mtl i newMap
-			)
+	local sub_count=getNumSubTexmaps orig_mtl
+	if sub_count >= 1 then (
+		for i=1 to sub_count do (
+			newMap = convertVrayUtilities (getSubTexmap orig_mtl i)
+			setSubTexmap orig_mtl i newMap
 		)
 	)
 	
 	cls=classof orig_mtl
 	local new_mtl=case cls of (
-		VRayMtl: errorCatching convertVrayMtl orig_mtl
-		VRayLightMtl: errorCatching convertVRayLightMtl orig_mtl 
-		VRayBlendMtl: errorCatching convertVRayBlendMtl orig_mtl
-		VRayCarPaintMtl: errorCatching convertVRayCarPaintMtl orig_mtl 
-		VRayPluginNodeMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayMtl: errorCatching convertVrayMtl orig_mtl
+		VrayLightMtl: errorCatching convertVrayLightMtl orig_mtl 
+		VrayBlendMtl: errorCatching convertVrayBlendMtl orig_mtl
+		VrayCarPaintMtl: errorCatching convertVrayCarPaintMtl orig_mtl 
+		VrayPluginNodeMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
-		VRayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
-		VRay2SidedMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayBumpMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayFastSSS2: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayOverrideMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayHairMtl: convertUnsupportedMtl orig_mtl 
-		VRayHairNextMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayMDLMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayOSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayPointParticleMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayScannedMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayStochasticFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRaySwitchMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayVectorDisplBake: errorCatching convertUnsupportedMtl orig_mtl 
-		VRayVRmatMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
+		Vray2SidedMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayBumpMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayFastSSS2: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayOverrideMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayHairMtl: convertUnsupportedMtl orig_mtl 
+		VrayHairNextMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayMDLMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayOSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayPointParticleMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayScannedMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayStochasticFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VraySwitchMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayVectorDisplBake: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayVrmatMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		
 		default: orig_mtl
 	)
@@ -662,47 +715,24 @@ fn cleanUpConversionData =(
 )
 
 fn convertScene =(
-	-- material conversion
+	
 	start = timeStamp()
 	
-	for c in supportedMtlClasses do ( --where c.creatable 
-		cls = execute c
-		if classof cls == material do(
-			-- get all materials from scene
-			clssInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
-			for i in clssInst do(
-				replaceInstances i (convertVrayMaterial i processMaps:false)
-			)
-		)
+	-- material conversion
+	matVray = for m in scenematerials where m.category == #vray and superclassof m == material collect m
+	for i in matVray do(
+		replaceInstances i (convertVrayMaterial i processMaps:false)
 	)
 	
-	-- map conversion
-	for c in supportedMapClasses do(
-		cls = execute c
-		if classof cls == textureMap do(
-			classInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false -- HUGE SLOW DOWN!!!!!!!!!!!!!
-			for i in classInst do(
-				newMap = convertVrayUtilities i
-				if newMap != #NoReplacement then(
-					replaceInstances i newMap
-				)
-			)
-		)
-	)
-
 	-- light conversion
-	allLights = for o in objects where superclassof o == light collect o
+	allLights = for o in objects where superclassof o == light and o.category == #vray collect o
 	for i in allLights do(
-		if isValidNode i do(
-			if i.parent != undefined and classof i.parent == DaylightAssemblyHead then() else(
-				newLight = convertLights i
-				if newLight != "env" do (
-					replaceInstances i newLight
-				)
-			)
+		newLight = convertLights i
+		if newLight != "env" do (
+			replaceInstances i newLight
 		)
 	)
-
+		
 	-- camera conversion
 	allCameras = for o in objects where superclassof o == camera collect o
 	for i in allCameras do(
