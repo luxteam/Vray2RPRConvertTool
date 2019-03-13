@@ -493,7 +493,7 @@ fn convertVrayColor origMap = (
 	r = RPR_Color_Value()
 	r.name = origMap.name + userPostfixStr
 	
-	r.color = color origMap.red origMap.green origMap.blue 
+	r.color = origMap.color 
 	
 	r
 )
