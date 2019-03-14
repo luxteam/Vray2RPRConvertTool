@@ -150,7 +150,7 @@ fn convertVrayMtl origMtl =(
 	if origMtl.texmap_refractionGlossiness != undefined do (
 		osl_map = createOSLInvertColor()
 		osl_map.input_map = origMtl.texmap_refractionGlossiness
-		r.refractionRoughnessTexmap.input_map = osl_map
+		r.refractionRoughnessTexmap = osl_map
 	)
 	r.refractionIor = origMtl.refraction_ior
 	r.refractionIorTexmap = origMtl.texmap_refractionIOR
@@ -169,7 +169,7 @@ fn convertVrayMtl origMtl =(
 	if origMtl.texmap_opacity != undefined do (
 		osl_map = createOSLInvertColor()
 		osl_map.input_map = origMtl.texmap_opacity
-		r.TransparencyTexmap.input_map = osl_map
+		r.transparencyTexmap = osl_map
 	)
 
 	if origMtl.texmap_bump_on do (
@@ -193,7 +193,7 @@ fn convertVrayCarPaintMtl origMtl =(
 	if origMtl.texmap_base_glossiness != undefined do (
 		osl_map = createOSLInvertColor()
 		osl_map.input_map = origMtl.texmap_base_glossiness
-		r.reflectionRoughnessTexmap.input_map = osl_map
+		r.reflectionRoughnessTexmap = osl_map
 	)
 
 	r.CoatingEnable = true
@@ -205,7 +205,7 @@ fn convertVrayCarPaintMtl origMtl =(
 	if origMtl.texmap_coat_glossiness != undefined do (
 		osl_map = createOSLInvertColor()
 		osl_map.input_map = origMtl.texmap_coat_glossiness
-		r.CoatingRoughnessTexmap.input_map = osl_map
+		r.CoatingRoughnessTexmap = osl_map
 	)
 
 	r
@@ -236,7 +236,7 @@ fn convertVrayLightMtl origMtl =(
 	if origMtl.opacity_texmap != undefined do (
 		osl_map = createOSLInvertColor()
 		osl_map.input_map = origMtl.opacity_texmap
-		r.TransparencyTexmap.input_map = osl_map
+		r.TransparencyTexmap = osl_map
 	)
 
 	-- displacement
@@ -332,6 +332,8 @@ fn convertVrayLight origLight = (
 	    	rpr.backgroundIntensity = origLight.multiplier
 	    	rpr.backgroundColor = origLight.color
 	    )
+
+	    delete origLight
 	)
 	
 	r
@@ -415,7 +417,7 @@ fn convertVrayPhysicalCamera origCamera =(
 fn convertVrayDomeCamera origCamera =(
 
 	r = Freecamera()
-	r.name = origCamera.name + rprPostfixStr
+	r.name = origCamera.name + unsupportedPostfixStr
 
 	r
 )
@@ -636,23 +638,26 @@ fn convertVrayUtilities orig_map =(
 )
 
 fn convertVrayMaterial orig_mtl =(
-	
+		
 	local i=findItem orig_mtls orig_mtl -- check if we have already converted this material
 	if i>0 then return new_mtls[i]  --if yes, just return the already converted one	
 	
 	-- recurse into sub-materials, if any
-	local sub_count=getNumSubMtls orig_mtl
-	if sub_count >= 1 then (
-		for i=1 to sub_count do (
-			setSubMtl orig_mtl i (convertVrayMaterial (getSubMtl orig_mtl i))
+	local sub_count_mtl=getNumSubMtls orig_mtl
+	if sub_count_mtl >= 1 then (
+		for mat=1 to sub_count_mtl do (
+			subMtl = getSubMtl orig_mtl mat
+			if subMtl != undefined do (
+				setSubMtl orig_mtl mat (convertVrayMaterial subMtl)
+			)
 		)
 	)
 
-	local sub_count=getNumSubTexmaps orig_mtl
-	if sub_count >= 1 then (
-		for i=1 to sub_count do (
-			newMap = convertVrayUtilities (getSubTexmap orig_mtl i)
-			setSubTexmap orig_mtl i newMap
+	local sub_count_map=getNumSubTexmaps orig_mtl
+	if sub_count_map >= 1 then (
+		for mp=1 to sub_count_map do (
+			newMap = convertVrayUtilities (getSubTexmap orig_mtl mp)
+			setSubTexmap orig_mtl mp newMap
 		)
 	)
 	
@@ -719,26 +724,58 @@ fn convertScene =(
 	start = timeStamp()
 	
 	-- material conversion
-	matVray = for m in scenematerials where m.category == #vray and superclassof m == material collect m
-	for i in matVray do(
-		replaceInstances i (convertVrayMaterial i processMaps:false)
+	vrayMtlClasses = #("VRayMtlWrapper", "VRayMtl", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
+	"VRayBlendMtl", "VRayBumpMtl", "VRayCarPaintMtl", "VRayFlakesMtl", "VRayFastSSS2", "VRayScatterVolume", \
+	"VRayOverrideMtl", "VRayGLSLMtl", "VRayHairMtl", "VRayHairNextMtl", "VRayMDLMtl", "VRayOSLMtl", "VRayPluginNodeMtl", \
+	"VRayPointParticleMtl", "VRayScannedMtl", "VRayStochasticFlakesMtl", "VRaySwitchMtl", "VRayVectorDisplBake", "VRayVRmatMtl")
+
+	for c in vrayMtlClasses do ( --where c.creatable 
+		cls = execute c
+		if classof cls == material do(
+			-- get all materials from scene
+			clssInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
+			for i in clssInst do(
+				newMat = errorCatching convertVrayMaterial i
+				replaceInstances i newMat
+			)
+		)
 	)
 	
+	vrayMapClasses = #("VrayCompTex", "VrayColor", "VrayBump2Normal", "VrayDirt", "VrayNormalMap", "VrayHDRI", 
+		"VrayColor2Bump", "VrayCurvature", "VrayDistanceTex", "VrayEdgesTex", "VrayFakeFresnelTex", "VrayGLSLTex", "VrayHairInfoTex", 
+		"VrayICC", "VrayLut", "VrayMultiSubTex", "VrayNoiseTex", "VrayOCIO", "VrayOSLText", "VrayParticleTex", "VrayPluginNodeTex", "VrayPtex", 
+		"VraySamplerInfoTex", "VraySky", "VraySoftbox", "VrayTriplanarTex", "VrayUserColor", "VrayUserScalar")
+
+	-- map conversion
+	for c in vrayMapClasses do(
+		cls = execute c
+		if classof cls == textureMap do(
+			classInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
+			for i in classInst do(
+				newMap = convertVrayUtilities i
+				replaceInstances i newMap
+			)
+		)
+	)
+
 	-- light conversion
 	allLights = for o in objects where superclassof o == light and o.category == #vray collect o
 	for i in allLights do(
 		newLight = convertLights i
 		if newLight != "env" do (
+			print(newLight)
 			replaceInstances i newLight
 		)
 	)
-		
+	
+	/*
 	-- camera conversion
 	allCameras = for o in objects where superclassof o == camera collect o
 	for i in allCameras do(
-		newCamera = convertCameras i
+		newCamera = errorCatching convertCameras i
 		replaceInstances i newCamera	
 	)
+	*/
 			
 	end = timeStamp()
 	print("Scene conversion took " +  ((end - start) / 1000.0) as string + " seconds ")
