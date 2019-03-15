@@ -238,6 +238,49 @@ fn convertVrayBlendMtl origMtl =(
 	r
 )
 
+fn convertVrayFastSSS2 origMtl =(
+	r = RPR_Uber_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	-- diffuse
+	r.diffuseColor = origMtl.diffuse_color
+	r.diffuseColorTexmap = origMtl.texmap_diffuse_color
+	r.diffuseWeight = origMtl.diffuse_amount
+	r.diffuseWeightTexmap = origMtl.texmap_diffuse_amount
+
+	r.sssEnable = true
+	r.sssColor = origMtl.sub_surface_color
+	r.sssColorTexmap = origMtl.texmap_sss_color
+	r.diffuseSeparateBackScatteringColor = true
+	r.diffuseBackScatteringColor = origMtl.scatter_color
+	r.diffuseBackScatteringColorTexmap = origMtl.texmap_scatter_color
+	r.sssRadius = point3 origMtl.scatter_radius origMtl.scatter_radius origMtl.scatter_radius
+	r.sssRadiusTexmap = origMtl.texmap_scatter_radius
+
+	r.reflectionColor = origMtl.specular_color
+	r.reflectionColorTexmap = origMtl.texmap_specular_color
+	
+	r.reflectionRoughness = 1 - origMtl.specular_glossiness
+	if origMtl.texmap_specular_color != undefined do (
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.texmap_specular_color
+		r.reflectionRoughnessTexmap = osl_map
+	)
+
+	if origMtl.texmap_opacity != undefined do (
+		osl_map = createOSLInvertColor()
+		osl_map.input_map = origMtl.texmap_opacity
+		r.transparencyTexmap = osl_map
+	)
+
+	if origMtl.texmap_bump_on do (
+		r.normalEnable = true
+		r.normalTexmap = origMtl.texmap_bump
+	)
+
+	r
+)
+
 fn convertVrayPluginNodeMtl origMtl =(
 	if origMtl.plugin == "BRDFVRayMtl" then (
 		r = RPR_Uber_Material()
@@ -804,6 +847,7 @@ fn convertVrayMaterial orig_mtl =(
 		VrayBlendMtl: errorCatching convertVrayBlendMtl orig_mtl
 		VrayCarPaintMtl: errorCatching convertVrayCarPaintMtl orig_mtl 
 		VrayPluginNodeMtl: errorCatching convertVrayPluginNodeMtl orig_mtl 
+		VrayFastSSS2: errorCatching convertVrayFastSSS2 orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
@@ -811,7 +855,6 @@ fn convertVrayMaterial orig_mtl =(
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayBumpMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VrayFastSSS2: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayOverrideMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
