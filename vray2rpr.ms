@@ -14,6 +14,7 @@
 	- VrayLightMtl
 	- VrayCarPaintMtl
 	- VrayBlendMtl
+	- VrayPluginNodeMtl (VrayMtl)
 
 	Supported utilities:
 	- VrayComptex
@@ -217,10 +218,117 @@ fn convertVrayBlendMtl origMtl =(
 
 	r.material1 = origMtl.baseMtl
 	r.material2 = origMtl.coatMtl[1]
-	r.weight = origMtl.texmap_blend_multiplier[1]
+	--r.weight = origMtl.texmap_blend_multiplier[1]
 	r.weightMap = origMtl.texmap_blend[1]
 
 	r
+)
+
+fn convertVrayPluginNodeMtl origMtl =(
+	if origMtl.plugin == "BRDFVRayMtl" then (
+		r = RPR_Uber_Material()
+		r.name = origMtl.name + rprPostfixStr
+
+		useRoughness = origMtl.option_use_roughness
+
+		-- diffuse
+		if origMtl.diffuse_use do (
+			r.diffuseColor = origMtl.diffuse_rgb
+			r.diffuseColorTexmap = origMtl.diffuse
+		) 
+		if origMtl.roughness_use do (
+			r.diffuseRoughnessTexmap = origMtl.roughness
+			r.diffuseRoughness = origMtl.roughness_rgb
+		)
+
+		-- reflection
+		if origMtl.reflect_use do (
+			if origMtl.reflect_rgb.red > 0 or origMtl.reflect_rgb.green > 0 or origMtl.reflect_rgb.blue > 0 do ( r.reflectionEnable = true )
+			r.reflectionColor = origMtl.reflect_rgb
+			r.reflectionColorTexmap = origMtl.reflect
+		)
+		if origMtl.reflect_glossiness_use do (
+			if useRoughness then (
+				r.reflectionRoughness = origMtl.reflect_glossiness_rgb
+				r.reflectionRoughnessTexmap = origMtl.reflect_glossiness
+			) else (
+				r.reflectionRoughness = 1 - origMtl.reflect_glossiness_rgb
+				if origMtl.reflect_glossiness != undefined do (
+					osl_map = createOSLInvertColor()
+					osl_map.input_map = origMtl.reflect_glossiness
+					r.reflectionRoughnessTexmap = osl_map
+				)
+			)
+		)
+		if origMtl.metalness_use and origMtl.metalness_rgb > 0.01 do ( 
+			r.reflectionEnable = true
+			r.reflectionMode = 2
+			r.reflectionColor = origMtl.diffuse_rgb
+			r.reflectionColorTexmap = origMtl.diffuse
+		)
+		if origMtl.fresnel and origMtl.fresnel_ior_use do (
+			r.reflectionIor = origMtl.fresnel_ior_rgb
+			r.reflectionIorTexmap = origMtl.fresnel_ior
+		)
+		if origMtl.metalness_use do (
+			r.reflectionMetalness = origMtl.metalness_rgb
+			r.reflectionMetalnessTexmap = origMtl.metalness
+		)
+
+		if origMtl.anisotropy_use do (
+			r.reflectionAnisotropy = origMtl.anisotropy_rgb
+			r.reflectionAnisotropyTexmap = origMtl.anisotropy
+		)
+		if origMtl.anisotropy_rotation_use do (
+			r.reflectionAnisotropyRotation = origMtl.anisotropy_rotation_rgb
+			r.reflectionAnisotropyRotationTexmap = origMtl.anisotropy_rotation
+		)
+
+		-- refraction
+		if origMtl.refract_use do (
+			if origMtl.refract_rgb.red > 0 or origMtl.refract_rgb.green > 0 or origMtl.refract_rgb.blue > 0 do ( r.refractionEnable = true )
+			r.refractionColor = origMtl.refract_rgb
+			r.refractionColorTexmap = origMtl.refract
+		)
+		if origMtl.refract_glossiness_use do (
+			r.refractionRoughness = 1 - origMtl.refract_glossiness_rgb
+			if origMtl.refract_glossiness != undefined do (
+				osl_map = createOSLInvertColor()
+				osl_map.input_map = origMtl.refract_glossiness
+				r.refractionRoughnessTexmap = osl_map
+			)
+		)
+		if origMtl.refract_ior_use do (
+			r.refractionIor = origMtl.refract_ior_rgb
+			r.refractionIorTexmap = origMtl.refract_ior
+		)
+
+		r.refractionAbsorptionDistance = origMtl.fog_mult
+		if origMtl.fog_color_tex_use do (
+			r.refractionAbsorptionColor = origMtl.fog_color
+			r.refractionAbsorptionColorTexmap = origMtl.fog_color_tex
+		)
+
+		-- emission
+		if origMtl.self_illumination_use do (
+			if origMtl.self_illumination_rgb.red > 0 or origMtl.self_illumination_rgb.green > 0 or origMtl.self_illumination_rgb.blue > 0 do ( r.emissiveEnable = true )
+			r.emissiveColor = origMtl.self_illumination_rgb
+			r.emissiveColorTexmap = origMtl.self_illumination
+			r.emissiveIntensity = origMtl.self_illumination_mul
+			r.emissiveWeight = 0.65
+		)
+
+		if origMtl.opacity_use and origMtl.opacity != undefined do (
+			osl_map = createOSLInvertColor()
+			osl_map.input_map = origMtl.opacity
+			r.transparencyTexmap = osl_map
+		)
+
+		r
+	) else (
+		r = convertUnsupportedMtl origMtl
+		r
+	)
 )
 
 fn convertVrayLightMtl origMtl =(
@@ -667,7 +775,7 @@ fn convertVrayMaterial orig_mtl =(
 		VrayLightMtl: errorCatching convertVrayLightMtl orig_mtl 
 		VrayBlendMtl: errorCatching convertVrayBlendMtl orig_mtl
 		VrayCarPaintMtl: errorCatching convertVrayCarPaintMtl orig_mtl 
-		VrayPluginNodeMtl: errorCatching convertUnsupportedMtl orig_mtl 
+		VrayPluginNodeMtl: errorCatching convertVrayPluginNodeMtl orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
