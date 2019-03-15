@@ -23,6 +23,7 @@
 	- VrayDirt
 	- VrayNormalMap
 	- VrayHDRI
+	- VrayCurvature
 
 	Supported lights:
 	- VrayLight
@@ -85,6 +86,19 @@ fn createOSLInvertColor =(
 	osl_map.OSLAutoUpdate = true
 	
 	osl_map
+)
+
+fn remap_value currentValue maxInput minInput maxOutput minOutput =(
+
+	if currentValue > maxInput do currentValue = maxInput
+	if currentValue < minInput do currentValue = minInput
+
+	inputDiff = maxInput - minInput
+	outputDiff = maxOutput - minOutput
+
+	remapped_value = minOutput + (((currentValue - minInput) as float / (inputDiff) as float) * outputDiff)
+
+	remapped_value
 )
 
 fn convertUnsupportedMtl origMtl =(
@@ -636,6 +650,20 @@ fn convertVrayColor origMap = (
 	r
 )
 
+fn convertVrayCurvature origMap = (
+	r = RPR_Ambient_Occlusion()
+	r.name = origMap.name + rprPostfixStr
+	
+	r.side = 1
+	min_color = remap_value origMap.out_color_min 1 0 255 0
+	r.unoccluded_Color = color min_color min_color min_color
+	max_color = remap_value origMap.out_color_max 1 0 255 0
+	r.occluded_Color = color max_color max_color max_color
+	r.radius = 0.04 + origMap.sample_spread / 21
+
+	r
+)
+
 fn convertVrayHDRI origMap = (
 	r = BitmapTexture()
 	r.name = origMap.name
@@ -711,9 +739,9 @@ fn convertVrayUtilities orig_map =(
 		VrayDirt: errorCatching convertVrayDirt orig_map
 		VrayNormalMap: errorCatching convertVrayNormalMap orig_map
 		VrayHDRI: errorCatching convertVrayHDRI orig_map
+		VrayCurvature: errorCatching convertVrayCurvature orig_map
 
 		VrayColor2Bump: errorCatching convertUnsupportedUtility orig_map
-		VrayCurvature: errorCatching convertUnsupportedUtility orig_map
 		VrayDistanceTex: errorCatching convertUnsupportedUtility orig_map
 		VrayEdgesTex: errorCatching convertUnsupportedUtility orig_map
 		VrayFakeFresnelTex: errorCatching convertUnsupportedUtility orig_map
