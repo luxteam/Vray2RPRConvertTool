@@ -758,6 +758,38 @@ fn convertVrayHDRI origMap = (
 	
 )
 
+fn convertColorOSL origMap operator = (
+	r = RPR_Arithmetic()
+	r.name = origMap.name + rprPostfixStr
+
+	r.operator = operator
+	r.Color1 = origMap.A
+	r.Color2 = origMap.B
+	r.color0texmap = origMap.A_map
+	r.color1texmap = origMap.B_map
+	r
+)
+
+fn convertOSLMap origMap = (
+
+	OSLPath = origMap.OSLPath
+	OSLFile = (filterString OSLPath "\\")
+	OSLFile = OSLFile[OSLFile.count]
+	local new_osl=case OSLFile of (
+		"ColorAdd.osl": convertColorOSL origMap 0
+		"ColorSub.osl": convertColorOSL origMap 1
+		"ColorMul.osl": convertColorOSL origMap 2
+		"ColorDiv.osl": convertColorOSL origMap 3
+		"ColorMin.osl": convertColorOSL origMap 12
+		"ColorMax.osl": convertColorOSL origMap 13
+
+		default: orig_map
+	)
+
+	new_osl
+	
+)
+
 fn convertVrayUtilities orig_map =(
 	if ((superclassof orig_map)!=textureMap) then return orig_map  -- check if this is a material; if not, just return the value
 	
@@ -783,6 +815,7 @@ fn convertVrayUtilities orig_map =(
 		VrayNormalMap: errorCatching convertVrayNormalMap orig_map
 		VrayHDRI: errorCatching convertVrayHDRI orig_map
 		VrayCurvature: errorCatching convertVrayCurvature orig_map
+		OSLMap: errorCatching convertOSLMap orig_map
 
 		VrayColor2Bump: errorCatching convertUnsupportedUtility orig_map
 		VrayDistanceTex: errorCatching convertUnsupportedUtility orig_map
@@ -923,7 +956,7 @@ fn convertScene =(
 	vrayMapClasses = #("VrayCompTex", "VrayColor", "VrayBump2Normal", "VrayDirt", "VrayNormalMap", "VrayHDRI", 
 		"VrayColor2Bump", "VrayCurvature", "VrayDistanceTex", "VrayEdgesTex", "VrayFakeFresnelTex", "VrayGLSLTex", "VrayHairInfoTex", 
 		"VrayICC", "VrayLut", "VrayMultiSubTex", "VrayNoiseTex", "VrayOCIO", "VrayOSLText", "VrayParticleTex", "VrayPluginNodeTex", "VrayPtex", 
-		"VraySamplerInfoTex", "VraySky", "VraySoftbox", "VrayTriplanarTex", "VrayUserColor", "VrayUserScalar")
+		"VraySamplerInfoTex", "VraySky", "VraySoftbox", "VrayTriplanarTex", "VrayUserColor", "VrayUserScalar", "OSLMap")
 
 	-- map conversion
 	for c in vrayMapClasses do(
