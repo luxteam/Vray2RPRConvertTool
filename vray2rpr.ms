@@ -231,7 +231,11 @@ fn convertVrayBlendMtl origMtl =(
 	r.name = origMtl.name + rprPostfixStr
 
 	r.material1 = origMtl.baseMtl
-	r.material2 = origMtl.coatMtl[1]
+	for i=1 to origMtl.coatMtl.count do (
+		if origMtl.coatMtl[i] != undefined do (
+			r.material2 = origMtl.coatMtl[i]
+		)
+	)
 	--r.weight = origMtl.texmap_blend_multiplier[1]
 	r.weightMap = origMtl.texmap_blend[1]
 
@@ -783,7 +787,7 @@ fn convertOSLMap origMap = (
 		"ColorMin.osl": convertColorOSL origMap 12
 		"ColorMax.osl": convertColorOSL origMap 13
 
-		default: orig_map
+		default: origMap
 	)
 
 	new_osl
@@ -800,8 +804,11 @@ fn convertVrayUtilities orig_map =(
 	local sub_count=getNumSubTexmaps orig_map
 	if sub_count >= 1 then (
 		for i=1 to sub_count do (
-			newMap = convertVrayUtilities (getSubTexmap orig_map i)
-			setSubTexmap orig_map i newMap
+			subMap = getSubTexmap orig_map i
+			if subMap != undefined do (
+				newMap = convertVrayUtilities subMap
+				setSubTexmap orig_map i newMap
+			)
 		)
 	)
 	
@@ -964,7 +971,7 @@ fn convertScene =(
 		if classof cls == textureMap do(
 			classInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
 			for i in classInst do(
-				newMap = convertVrayUtilities i
+				newMap = errorCatching convertVrayUtilities i
 				replaceInstances i newMap
 			)
 		)
@@ -975,7 +982,6 @@ fn convertScene =(
 	for i in allLights do(
 		newLight = convertLights i
 		if newLight != "env" do (
-			print(newLight)
 			replaceInstances i newLight
 		)
 	)
