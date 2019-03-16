@@ -234,10 +234,10 @@ fn convertVrayBlendMtl origMtl =(
 	for i=1 to origMtl.coatMtl.count do (
 		if origMtl.coatMtl[i] != undefined do (
 			r.material2 = origMtl.coatMtl[i]
+			r.weightMap = origMtl.texmap_blend[i]
 		)
 	)
 	--r.weight = origMtl.texmap_blend_multiplier[1]
-	r.weightMap = origMtl.texmap_blend[1]
 
 	r
 )
