@@ -1031,4 +1031,6 @@ fn convertScene =(
 	
 )
 
-convertScene()
+if not globalVars.isglobal(#autoLaunch) do (
+     convertScene()
+)
