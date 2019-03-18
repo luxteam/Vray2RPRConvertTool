@@ -214,7 +214,7 @@ fn convertVrayCarPaintMtl origMtl =(
 	r.CoatingEnable = true
 	r.CoatingColor = origMtl.coat_color
 	r.CoatingColorTexmap = origMtl.texmap_coat_color
-	r.CoatingWeight = origMtl.coat_strength
+	r.CoatingWeight = 1
 	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
 	r.CoatingRoughness = 1 - origMtl.coat_glossiness
 	if origMtl.texmap_coat_glossiness != undefined do (
@@ -231,14 +231,39 @@ fn convertVrayBlendMtl origMtl =(
 	r.name = origMtl.name + rprPostfixStr
 
 	r.material1 = origMtl.baseMtl
+
+	-- materials count
+	materials_count = 0
 	for i=1 to origMtl.coatMtl.count do (
 		if origMtl.coatMtl[i] != undefined do (
-			r.material2 = origMtl.coatMtl[i]
-			r.weightMap = origMtl.texmap_blend[i]
+			materials_count += 1
+		)
+	)
+
+	-- materials conversion
+	first_material = true
+	for i=1 to origMtl.coatMtl.count do (
+		if origMtl.coatMtl[i] != undefined do (
+			if materials_count > 1 then (
+				if first_material then (
+					r.material2 = origMtl.coatMtl[i]
+					r.weightMap = origMtl.texmap_blend[i]
+					first_material = false
+				) else (
+					old_r = r
+					r = RPR_Blend_Material()
+					r.material1 = old_r
+					r.material2 = origMtl.coatMtl[i]
+					r.weightMap = origMtl.texmap_blend[i]
+				)
+			) else (
+				r.material2 = origMtl.coatMtl[i]
+				r.weightMap = origMtl.texmap_blend[i]
+			)
 		)
 	)
 	--r.weight = origMtl.texmap_blend_multiplier[1]
-
+	
 	r
 )
 
