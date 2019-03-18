@@ -527,6 +527,12 @@ fn convertVrayLight origLight = (
 	    	rpr.backgroundColor = origLight.color
 	    )
 
+	    -- rotate IBL
+		clearSelection()
+		select $RPREnv001
+		$.rotation = quat 0 0 0.707107 0.707107
+		clearSelection()
+
 	    delete origLight
 	)
 	
@@ -546,6 +552,7 @@ fn convertVraySun origLight = (
 		rpr.backgroundSkySunDisc = origLight.size_multiplier
 		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
 		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 49.5
+
     )
 
 	-- clean scene
@@ -1026,6 +1033,7 @@ fn convertScene =(
 
 	renderers.current = Radeon_ProRender()
 	renderers.current.raycastEpsilon = 0.001
+	renderers.current.texturecompression = true
 
 	cleanUpConversionData()
 	
