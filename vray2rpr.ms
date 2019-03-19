@@ -294,7 +294,7 @@ fn convertVrayFastSSS2 origMtl =(
 	-- diffuse
 	r.diffuseColor = origMtl.diffuse_color
 	r.diffuseColorTexmap = origMtl.texmap_diffuse_color
-	r.diffuseWeight = origMtl.diffuse_amount
+	r.diffuseWeight = 1
 	r.diffuseWeightTexmap = origMtl.texmap_diffuse_amount
 
 	r.sssEnable = true
@@ -1062,4 +1062,6 @@ fn convertScene =(
 	
 )
 
-convertScene()
+if not globalVars.isglobal(#autoLaunch) do (
+     convertScene()
+)
