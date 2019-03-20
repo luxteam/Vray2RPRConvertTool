@@ -267,6 +267,26 @@ fn convertVrayBlendMtl origMtl =(
 	r
 )
 
+fn convertVrayBumpMtl origMtl =(
+	r = "no_replace"
+	
+	base_material = origMtl.base_mtl
+
+	if classof base_material == RPR_Uber_Material do (
+		rpr_normal_map = RPR_Normal()
+		rpr_normal_map.map = origMtl.bump_map
+		rpr_normal_map.strength = origMtl.bump_amount
+		rpr_normal_map.isBump = true
+
+		base_material.normalEnable = true
+		base_material.normalTexmap = rpr_normal_map
+		
+		replaceInstances origMtl base_material
+	)
+
+	r
+)
+
 fn convertVrayFastSSS2 origMtl =(
 	r = RPR_Uber_Material()
 	r.name = origMtl.name + rprPostfixStr
@@ -274,7 +294,7 @@ fn convertVrayFastSSS2 origMtl =(
 	-- diffuse
 	r.diffuseColor = origMtl.diffuse_color
 	r.diffuseColorTexmap = origMtl.texmap_diffuse_color
-	r.diffuseWeight = origMtl.diffuse_amount
+	r.diffuseWeight = 1
 	r.diffuseWeightTexmap = origMtl.texmap_diffuse_amount
 
 	r.sssEnable = true
@@ -527,6 +547,12 @@ fn convertVrayLight origLight = (
 	    	rpr.backgroundColor = origLight.color
 	    )
 
+	    -- rotate IBL
+		clearSelection()
+		select $RPREnv001
+		$.rotation = quat 0 0 0.707107 0.707107
+		clearSelection()
+
 	    delete origLight
 	)
 	
@@ -545,7 +571,8 @@ fn convertVraySun origLight = (
 		rpr.backgroundSkyFilterColor = origLight.filter_color
 		rpr.backgroundSkySunDisc = origLight.size_multiplier
 		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
-		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 49.5
+		rpr.backgroundSkyIntensity = origLight.intensity_multiplier
+
     )
 
 	-- clean scene
@@ -913,12 +940,12 @@ fn convertVrayMaterial orig_mtl =(
 		VrayCarPaintMtl: errorCatching convertVrayCarPaintMtl orig_mtl 
 		VrayPluginNodeMtl: errorCatching convertVrayPluginNodeMtl orig_mtl 
 		VrayFastSSS2: errorCatching convertVrayFastSSS2 orig_mtl 
+		VrayBumpMtl: errorCatching convertVrayBumpMtl orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
 		Vray2SidedMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VrayBumpMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayOverrideMtl: errorCatching convertUnsupportedMtl orig_mtl 
@@ -968,7 +995,7 @@ fn convertScene =(
 	start = timeStamp()
 	
 	-- material conversion
-	vrayMtlClasses = #("VRayMtlWrapper", "VRayMtl", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
+	vrayMtlClasses = #("VRayMtl", "VRayMtlWrapper", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
 	"VRayBlendMtl", "VRayBumpMtl", "VRayCarPaintMtl", "VRayFlakesMtl", "VRayFastSSS2", "VRayScatterVolume", \
 	"VRayOverrideMtl", "VRayGLSLMtl", "VRayHairMtl", "VRayHairNextMtl", "VRayMDLMtl", "VRayOSLMtl", "VRayPluginNodeMtl", \
 	"VRayPointParticleMtl", "VRayScannedMtl", "VRayStochasticFlakesMtl", "VRaySwitchMtl", "VRayVectorDisplBake", "VRayVRmatMtl")
@@ -980,7 +1007,10 @@ fn convertScene =(
 			clssInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
 			for i in clssInst do(
 				newMat = errorCatching convertVrayMaterial i
-				replaceInstances i newMat
+				print(newMat)
+				if newMat != "no_replace" do (
+					replaceInstances i newMat
+				)
 			)
 		)
 	)
@@ -1026,9 +1056,13 @@ fn convertScene =(
 
 	renderers.current = Radeon_ProRender()
 	renderers.current.raycastEpsilon = 0.001
+	renderers.current.texturecompression = true
 
 	cleanUpConversionData()
 	
 )
 
-convertScene()
+if not globalVars.isglobal(#autoLaunch) do (
+     convertScene()
+)
+
