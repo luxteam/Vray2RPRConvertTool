@@ -571,7 +571,7 @@ fn convertVraySun origLight = (
 		rpr.backgroundSkyFilterColor = origLight.filter_color
 		rpr.backgroundSkySunDisc = origLight.size_multiplier
 		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
-		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 49.5
+		rpr.backgroundSkyIntensity = origLight.intensity_multiplier
 
     )
 
