@@ -200,6 +200,7 @@ fn convertVrayCarPaintMtl origMtl =(
 	r.name = origMtl.name + rprPostfixStr
 
 	r.diffuseColor = origMtl.base_color
+	r.diffuseColorTexmap = origMtl.texmap_base_color
 	
 	r.reflectionEnable = true
 	r.ReflectionWeight = origMtl.base_reflection
@@ -211,10 +212,18 @@ fn convertVrayCarPaintMtl origMtl =(
 		r.reflectionRoughnessTexmap = osl_map
 	)
 
+	if origMtl.base_trace_reflections do (
+		r.reflectionColor = origMtl.base_color
+		r.reflectionColorTexmap = origMtl.texmap_base_color
+		r.reflectionMode = 2
+		r.reflectionMetalness = origMtl.base_reflection
+		r.reflectionMetalnessTexmap = origMtl.texmap_base_reflection
+	)
+
 	r.CoatingEnable = true
 	r.CoatingColor = origMtl.coat_color
 	r.CoatingColorTexmap = origMtl.texmap_coat_color
-	r.CoatingWeight = 1
+	r.CoatingWeight = origMtl.coat_strength
 	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
 	r.CoatingRoughness = 1 - origMtl.coat_glossiness
 	if origMtl.texmap_coat_glossiness != undefined do (
@@ -222,6 +231,10 @@ fn convertVrayCarPaintMtl origMtl =(
 		osl_map.input_map = origMtl.texmap_coat_glossiness
 		r.CoatingRoughnessTexmap = osl_map
 	)
+
+	r.refractionAbsorptionColor = origMtl.base_color
+	r.refractionAbsorptionColorTexmap = origMtl.texmap_base_color
+	r.coatingThickness = 2
 
 	r
 )
@@ -505,6 +518,10 @@ fn convertVrayLight origLight = (
 		r.enabled = origLight.on 
 		if origLight.invisible then ( r.isVisible = false ) else ( r.isVisible = true ) -- visible
 		r.lightType = 0 -- area light
+
+		if origLight.normalizeColor == 0 do (
+			r.UnitsType = 0
+		)
 
 		local areaShape = case light_type of (
 			0: 3 -- Plane
@@ -977,6 +994,10 @@ fn cleanUpConversionData =(
 	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
 
+	-- delete AOVs
+	re = maxOps.GetCurRenderElementMgr()
+    re.removeallrenderelements()
+
 	orig_mtls=#()
 	new_mtls=#()
 	orig_maps=#()
@@ -1007,7 +1028,6 @@ fn convertScene =(
 			clssInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
 			for i in clssInst do(
 				newMat = errorCatching convertVrayMaterial i
-				print(newMat)
 				if newMat != "no_replace" do (
 					replaceInstances i newMat
 				)
@@ -1041,18 +1061,30 @@ fn convertScene =(
 		)
 	)
 	
-	/*
+	
 	-- camera conversion
 	allCameras = for o in objects where superclassof o == camera collect o
 	for i in allCameras do(
 		newCamera = errorCatching convertCameras i
 		replaceInstances i newCamera	
 	)
-	*/
+	
 			
 	end = timeStamp()
 	print("Scene conversion took " +  ((end - start) / 1000.0) as string + " seconds ")
 	print("Converted: " + new_mtls.count as string + " materials, " + new_maps.count as string + " utilities and " + new_lights.count as string + " lights.")
+
+	vr = vray()
+	if classof renderers.current == classof vr do (
+		if not renderers.current.output_getsetsfrommax do (
+			vray_render = renderers.current
+			renderHeight = vray_render.output_height
+			renderWidth = vray_render.output_width
+			renderPiXelAspect = vray_render.output_aspect
+			rendImageAspectRatio = vray_render.output_imageaspect
+			renderSceneDialog.update()
+		)
+	)
 
 	renderers.current = Radeon_ProRender()
 	renderers.current.raycastEpsilon = 0.001
