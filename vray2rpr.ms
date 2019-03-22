@@ -233,8 +233,6 @@ fn convertVrayCarPaintMtl origMtl =(
 	)
 
 	r.refractionAbsorptionColor = origMtl.base_color
-	r.refractionAbsorptionColorTexmap = origMtl.texmap_base_color
-	r.coatingThickness = 2
 
 	r
 )
@@ -1025,7 +1023,7 @@ fn convertScene =(
 		cls = execute c
 		if classof cls == material do(
 			-- get all materials from scene
-			clssInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
+			clssInst = getclassinstances cls
 			for i in clssInst do(
 				newMat = errorCatching convertVrayMaterial i
 				if newMat != "no_replace" do (
@@ -1044,9 +1042,10 @@ fn convertScene =(
 	for c in vrayMapClasses do(
 		cls = execute c
 		if classof cls == textureMap do(
-			classInst = getclassinstances cls processAllAnimatables:false processChildren:false asTrackViewPick:false
+			classInst = getclassinstances cls
 			for i in classInst do(
 				newMap = errorCatching convertVrayUtilities i
+				print(newMap)
 				replaceInstances i newMap
 			)
 		)
