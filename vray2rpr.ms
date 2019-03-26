@@ -300,6 +300,27 @@ fn convertVrayBumpMtl origMtl =(
 	r
 )
 
+fn convertVray2SidedMtl origMtl =(
+	r = "no_replace"
+	
+	if origMtl.frontMtl != undefined then(
+		base_material = origMtl.frontMtl
+	) else if origMtl.backMtl != undefined then(
+		base_material = origMtl.backMtl
+	)
+
+	if classof base_material == RPR_Uber_Material do (
+		base_material.diffuseBackscatteringWeight = 1
+		base_material.diffuseSeparateBackScatteringColor = true
+		base_material.diffuseBackScatteringColor = origMtl.translucency
+		base_material.diffuseBackScatteringColorTexmap = origMtl.texmap_translucency
+		
+		replaceInstances origMtl base_material
+	)
+
+	r
+)
+
 fn convertVrayFastSSS2 origMtl =(
 	r = RPR_Uber_Material()
 	r.name = origMtl.name + rprPostfixStr
@@ -981,10 +1002,10 @@ fn convertVrayMaterial orig_mtl =(
 		VrayPluginNodeMtl: errorCatching convertVrayPluginNodeMtl orig_mtl 
 		VrayFastSSS2: errorCatching convertVrayFastSSS2 orig_mtl 
 		VrayBumpMtl: errorCatching convertVrayBumpMtl orig_mtl 
+		Vray2SidedMtl: errorCatching convertVray2SidedMtl orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
-		Vray2SidedMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
