@@ -507,6 +507,11 @@ fn convertVrayIES origLight = (
 )
 
 fn convertVrayLight origLight = (
+	if origLight.skylightPortal then ( 
+		delete origLight
+		return "no_replace"
+	)
+
 	light_type = origLight.type
 	if light_type != 1 then (
 		r = physical_light()
@@ -517,10 +522,6 @@ fn convertVrayLight origLight = (
 		if origLight.invisible then ( r.isVisible = false ) else ( r.isVisible = true ) -- visible
 		r.lightType = 0 -- area light
 
-		if origLight.normalizeColor == 0 do (
-			r.UnitsType = 0
-		)
-
 		local areaShape = case light_type of (
 			0: 3 -- Plane
 			2: 2 -- Sphere
@@ -530,7 +531,31 @@ fn convertVrayLight origLight = (
 		)
 		r.areaShape = areaShape
 
-		r.LightIntensity = origLight.multiplier
+		physicalCamera = getclassinstances VrayPhysicalCamera
+		if physicalCamera.count < 1 do (
+			if origLight.normalizeColor == 0 do ( -- image
+				r.UnitsType = 0
+				r.LightIntensity = origLight.multiplier * 2.5
+			) 
+			if origLight.normalizeColor == 1 do ( -- luminous
+				r.UnitsType = 0
+				r.LightIntensity = origLight.multiplier / 10000000
+			)
+			if origLight.normalizeColor == 2 do ( -- luminance
+				r.UnitsType = 0
+				r.LightIntensity = origLight.multiplier / 10000
+			)
+			if origLight.normalizeColor == 3 do ( -- radiant power
+				r.UnitsType = 1
+				r.LightIntensity = origLight.multiplier
+			)
+			if origLight.normalizeColor == 4 do ( -- radiant power
+				r.UnitsType = 2
+				r.LightIntensity = origLight.multiplier / 2
+			)
+
+		)
+
 		r.colourMode = origLight.color_mode
 		r.colourPicker = origLight.color
 		r.temperature = origLight.color_temperature
@@ -549,7 +574,7 @@ fn convertVrayLight origLight = (
 		)
 
 	) else (
-		r = "env"
+		r = "no_replace"
 		if origLight.on do (
 			rpr = Radeon_ProRender()
 			rpr.backgroundOverride = true
@@ -575,7 +600,7 @@ fn convertVrayLight origLight = (
 )
 
 fn convertVraySun origLight = (
-	r = "env"
+	r = "no_replace"
 	
 	if origLight.enabled do (
 		rpr = Radeon_ProRender()
@@ -601,7 +626,7 @@ fn convertVrayAmbientLight origLight = (
 	-- clean scene
 	delete origLight
 
-	r = "env"
+	r = "no_replace"
 	r
 )
 
@@ -617,7 +642,6 @@ fn convertLights orig_light =(
 		VrayIES: errorCatching convertVrayIES orig_light 
 		VraySun: errorCatching convertVraySun orig_light 
 		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
-		
 		
 		default: orig_light
 	)
@@ -635,10 +659,10 @@ fn convertVrayPhysicalCamera origCamera =(
 	r = Freecamera()
 	r.name = origCamera.name + rprPostfixStr
 
-	r.targetDistance = origCamera.target_distance
-	r.showCone = origCamera.show_camera_cone
-	r.fov = origCamera.fov
-	-- r. = origCamera.film_width
+	r.targetDistance = origCamera.target_distance -- 275
+	r.showCone = origCamera.show_camera_cone -- 0 1 2
+	r.fov = origCamera.fov -- 65 771
+	-- r. = origCamera.film_width 22 246
 	r.mpassEffect.useTargetDistance = origCamera.use_dof
 	r.clipManually = origCamera.clip_on
 	r.nearclip = origCamera.clip_near
@@ -1044,7 +1068,6 @@ fn convertScene =(
 			classInst = getclassinstances cls
 			for i in classInst do(
 				newMap = errorCatching convertVrayUtilities i
-				print(newMap)
 				replaceInstances i newMap
 			)
 		)
@@ -1054,7 +1077,7 @@ fn convertScene =(
 	allLights = for o in objects where superclassof o == light and o.category == #vray collect o
 	for i in allLights do(
 		newLight = convertLights i
-		if newLight != "env" do (
+		if newLight != "no_replace" do (
 			replaceInstances i newLight
 		)
 	)
