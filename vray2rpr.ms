@@ -637,9 +637,8 @@ fn convertVrayPhysicalCamera origCamera =(
 
 	r.targetDistance = origCamera.target_distance
 	r.showCone = origCamera.show_camera_cone
-	if origCamera.specify_fov do (
-		r.fov = origCamera.fov
-	)
+	r.fov = origCamera.fov
+	-- r. = origCamera.film_width
 	r.mpassEffect.useTargetDistance = origCamera.use_dof
 	r.clipManually = origCamera.clip_on
 	r.nearclip = origCamera.clip_near
