@@ -212,6 +212,7 @@ fn convertVrayCarPaintMtl origMtl =(
 		r.reflectionRoughnessTexmap = osl_map
 	)
 
+	/*
 	if origMtl.base_trace_reflections do (
 		r.reflectionColor = origMtl.base_color
 		r.reflectionColorTexmap = origMtl.texmap_base_color
@@ -219,11 +220,12 @@ fn convertVrayCarPaintMtl origMtl =(
 		r.reflectionMetalness = origMtl.base_reflection
 		r.reflectionMetalnessTexmap = origMtl.texmap_base_reflection
 	)
+	*/
 
 	r.CoatingEnable = true
 	r.CoatingColor = origMtl.coat_color
 	r.CoatingColorTexmap = origMtl.texmap_coat_color
-	r.CoatingWeight = origMtl.coat_strength
+	r.CoatingWeight = 1
 	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
 	r.CoatingRoughness = 1 - origMtl.coat_glossiness
 	if origMtl.texmap_coat_glossiness != undefined do (
@@ -232,7 +234,7 @@ fn convertVrayCarPaintMtl origMtl =(
 		r.CoatingRoughnessTexmap = osl_map
 	)
 
-	r.refractionAbsorptionColor = origMtl.base_color
+	--r.refractionAbsorptionColor = origMtl.base_color
 
 	r
 )
