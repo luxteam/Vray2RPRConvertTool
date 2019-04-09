@@ -35,6 +35,8 @@
 
 */
 
+orig_shps=#()
+new_shps=#()
 orig_mtls=#()
 new_mtls=#()
 orig_maps=#()
@@ -908,6 +910,24 @@ fn convertOSLMap origMap = (
 	
 )
 
+fn convertVraySphere origShape = (
+	r = Sphere()
+
+	r.radius = origShape.radius
+	--r.normal_flip = origShape.flip_normals
+	r
+	
+)
+
+fn convertVrayPlane origShape = (
+	r = Plane()
+
+	r.length = 1000000000.0
+	r.width = 1000000000.0
+	r
+	
+)
+
 fn convertVrayUtilities orig_map =(
 	if ((superclassof orig_map)!=textureMap) then return orig_map  -- check if this is a material; if not, just return the value
 	
@@ -1034,10 +1054,32 @@ fn convertVrayMaterial orig_mtl =(
 	new_mtl
 )
 
+fn convertVrayShape orig_shp =(
+		
+	local i=findItem orig_shps orig_shp -- check if we have already converted this shape
+	if i>0 then return new_shps[i]  --if yes, just return the already converted one	
+	
+	cls=classof orig_shp
+	local new_shp=case cls of (
+		VraySphere: errorCatching convertVraySphere orig_shp
+		VrayPlane: errorCatching convertVrayPlane orig_shp 
+		
+		default: orig_shp
+	)
+	
+	if new_shp != orig_shp then ( 		-- if converted, add to the list of converted materials
+		append orig_shps orig_shp
+		append new_shps new_shp
+	)
+	
+	new_shp
+)
+
 fn cleanUpConversionData =(
 
 	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
+	delete (for elem in new_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
 
 	-- delete AOVs
 	re = maxOps.GetCurRenderElementMgr()
@@ -1059,6 +1101,20 @@ fn cleanUpConversionData =(
 fn convertScene =(
 	
 	start = timeStamp()
+
+	-- shapes conversion
+	vrayShapes = #("VraySphere", "VrayPlane")
+	for c in vrayShapes do(
+		cls = execute c 
+		if classof cls == GeometryClass do(
+			-- get all instances from scene
+			clssInst = getclassinstances cls
+			for i in clssInst do(
+				newShape = errorCatching convertVrayShape i
+				replaceInstances i newShape
+			)
+		)
+	)
 	
 	-- material conversion
 	vrayMtlClasses = #("VRayMtl", "VRayMtlWrapper", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
