@@ -478,7 +478,7 @@ fn convertVrayLightMtl origMtl =(
 	r.name = origMtl.name + rprPostfixStr
 
 	-- emission
-	if origMtl.color.red > 0 or origMtl.color.green > 0 or origMtl.color.blue > 0 do ( r.emissiveEnable = true )
+	r.emissiveEnable = true
 	r.emissiveColor = origMtl.color
 	r.emissiveColorTexmap = origMtl.texmap
 	r.emissiveIntensity = origMtl.multiplier
