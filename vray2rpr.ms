@@ -571,8 +571,9 @@ fn convertVrayLight origLight = (
 			if origLight.normalizeColor == 3 do ( -- radiant power
 				r.UnitsType = 1
 				r.LightIntensity = origLight.multiplier
+				r.LuminousEfficacy = 250
 			)
-			if origLight.normalizeColor == 4 do ( -- radiant power
+			if origLight.normalizeColor == 4 do ( -- radiance
 				r.UnitsType = 2
 				r.LightIntensity = origLight.multiplier / 2
 			)
@@ -584,10 +585,10 @@ fn convertVrayLight origLight = (
 		r.temperature = origLight.color_temperature
 
 		if areaShape == 2 or areaShape == 0 do (
-			r.areaWidths = origLight.size0
+			r.areaWidths = origLight.sizeLength
 		)
 		if areaShape == 3 do (
-			r.areaWidths = origLight.size1
+			r.areaWidths = origLight.sizeWidth
 			r.areaLength = origLight.sizeLength
 		)
 		
