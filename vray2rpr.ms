@@ -915,6 +915,12 @@ fn convertVraySphere origShape = (
 
 	r.radius = origShape.radius
 	--r.normal_flip = origShape.flip_normals
+
+	clearSelection()
+	select r
+	modPanel.addModToSelection (TurboSmooth ()) ui:on
+	clearSelection()
+
 	r
 	
 )
