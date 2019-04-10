@@ -337,11 +337,13 @@ fn convertVrayFastSSS2 origMtl =(
 	r.sssColor = origMtl.sub_surface_color
 	r.sssColorTexmap = origMtl.texmap_sss_color
 	r.diffuseSeparateBackScatteringColor = true
+	r.diffuseBackscatteringWeight = 0.25
 	r.diffuseBackScatteringColor = origMtl.scatter_color
 	r.diffuseBackScatteringColorTexmap = origMtl.texmap_scatter_color
 	r.sssRadius = point3 origMtl.scatter_radius origMtl.scatter_radius origMtl.scatter_radius
 	r.sssRadiusTexmap = origMtl.texmap_scatter_radius
 
+	if origMtl.specular_color.red > 0 or origMtl.specular_color.green > 0 or origMtl.specular_color.blue > 0 do ( r.reflectionEnable = true )
 	r.reflectionColor = origMtl.specular_color
 	r.reflectionColorTexmap = origMtl.texmap_specular_color
 	
@@ -361,6 +363,22 @@ fn convertVrayFastSSS2 origMtl =(
 	if origMtl.texmap_bump_on do (
 		r.normalEnable = true
 		r.normalTexmap = origMtl.texmap_bump
+	)
+
+	r
+)
+
+fn convertVrayMtlWrapper origMtl =(
+	r = RPR_Shadow_Catcher_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	r.shadowAlphaMul = 0.2
+	if not origMtl.matteSurface do(
+		r.BackgroundIsEnvironment = false
+		if classof origMtl.baseMtl == RPR_Uber_Material do(
+			r.shadowColor = origMtl.baseMtl.diffuseColor
+			r.shadowColorTexmap = origMtl.baseMtl.diffuseColorTexmap
+		)
 	)
 
 	r
@@ -1030,9 +1048,9 @@ fn convertVrayMaterial orig_mtl =(
 		VrayFastSSS2: errorCatching convertVrayFastSSS2 orig_mtl 
 		VrayBumpMtl: errorCatching convertVrayBumpMtl orig_mtl 
 		Vray2SidedMtl: errorCatching convertVray2SidedMtl orig_mtl 
+		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
-		VrayMtlWrapper: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
