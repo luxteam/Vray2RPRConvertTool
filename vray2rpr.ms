@@ -518,7 +518,7 @@ fn convertVrayLightMtl origMtl =(
 
 fn convertVrayIES origLight = (
 	r = ies_light()
-	r.name = origLight.name + rprPostfixStr
+	origLight.name += rprPostfixStr
 	
 	-- OnOff, Include/exclude
 	r.enabled = origLight.enabled
@@ -558,7 +558,7 @@ fn convertVrayLight origLight = (
 	light_type = origLight.type
 	if light_type != 1 then (
 		r = physical_light()
-		r.name = origLight.name + rprPostfixStr
+		origLight.name += rprPostfixStr
 
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
@@ -701,7 +701,7 @@ fn convertLights orig_light =(
 fn convertVrayPhysicalCamera origCamera =(
 
 	r = Freecamera()
-	r.name = origCamera.name + rprPostfixStr
+	origCamera.name += rprPostfixStr
 
 	r.targetDistance = origCamera.target_distance -- 275
 	r.showCone = origCamera.show_camera_cone -- 0 1 2
@@ -720,7 +720,7 @@ fn convertVrayPhysicalCamera origCamera =(
 fn convertVrayDomeCamera origCamera =(
 
 	r = Freecamera()
-	r.name = origCamera.name + unsupportedPostfixStr
+	origCamera.name += unsupportedPostfixStr
 
 	r
 )
@@ -847,7 +847,7 @@ fn convertVrayCurvature origMap = (
 
 fn convertVrayHDRI origMap = (
 	r = BitmapTexture()
-	r.name = origMap.name
+	r.name = origMap.name + rprPostfixStr
 	
 	-- filename, output
 	if origMap.HDRIMapName != "" and origMap.HDRIMapName != undefined do(
@@ -930,6 +930,7 @@ fn convertOSLMap origMap = (
 
 fn convertVraySphere origShape = (
 	r = Sphere()
+	origShape.name += rprPostfixStr
 
 	r.radius = origShape.radius
 	--r.normal_flip = origShape.flip_normals
@@ -945,9 +946,18 @@ fn convertVraySphere origShape = (
 
 fn convertVrayPlane origShape = (
 	r = Plane()
+	origShape.name += rprPostfixStr
 
 	r.length = 1000000000.0
 	r.width = 1000000000.0
+
+	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
+	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
+		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
+		shadow_catcher_mat.shadowAlphaMul = 0.2
+		origShape.material = shadow_catcher_mat
+	)
+
 	r
 	
 )
@@ -1109,6 +1119,8 @@ fn cleanUpConversionData =(
 	re = maxOps.GetCurRenderElementMgr()
     re.removeallrenderelements()
 
+    orig_shps=#()
+    new_shps=#()
 	orig_mtls=#()
 	new_mtls=#()
 	orig_maps=#()
@@ -1128,16 +1140,10 @@ fn convertScene =(
 
 	-- shapes conversion
 	vrayShapes = #("VraySphere", "VrayPlane")
-	for c in vrayShapes do(
-		cls = execute c 
-		if classof cls == GeometryClass do(
-			-- get all instances from scene
-			clssInst = getclassinstances cls
-			for i in clssInst do(
-				newShape = errorCatching convertVrayShape i
-				replaceInstances i newShape
-			)
-		)
+	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere collect i
+	for i in vrayShapeInstances do(
+		newShape = errorCatching convertVrayShape i
+		replaceInstances i newShape
 	)
 	
 	-- material conversion
