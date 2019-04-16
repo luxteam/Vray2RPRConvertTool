@@ -249,6 +249,52 @@ fn convertVrayCarPaintMtl origMtl =(
 	r
 )
 
+fn convertVrayOverrideMtl origMtl =(
+
+	if origMtl.baseMtl == undefined do (
+		r = RPR_Uber_Material()
+		return r
+	)
+
+	materials = #()
+	if origMtl.giMtl != undefined do(
+		append materials origMtl.giMtl
+	)
+	if origMtl.reflectMtl != undefined do(
+		append materials origMtl.reflectMtl
+	)
+	if origMtl.refractMtl != undefined do(
+		append materials origMtl.refractMtl
+	)
+
+	if materials.count == 0 do(
+		return origMtl.baseMtl
+	)
+
+	r = RPR_Blend_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	r.material1 = origMtl.baseMtl
+	r.weight = 0.5
+
+	-- materials conversion
+	first_material = true
+	for i in materials do (
+		if first_material then (
+			r.material2 = i
+			first_material = false
+		) else (
+			old_r = r
+			r = RPR_Blend_Material()
+			r.material1 = old_r
+			r.material2 = i
+			r.weight = 0.5
+		)
+	)
+
+	r
+)
+
 fn convertVrayBlendMtl origMtl =(
 	r = RPR_Blend_Material()
 	r.name = origMtl.name + rprPostfixStr
@@ -528,9 +574,15 @@ fn convertVrayIES origLight = (
 	r = ies_light()
 	origLight.name += rprPostfixStr
 	
-	-- OnOff, Include/exclude
+	-- On/Off, Include/exclude
 	r.enabled = origLight.enabled
 	r.targeted = origLight.targeted
+
+	/*
+	r.pos = origLight.pos
+	r.scale = origLight.scale
+	r.rotation = [origLight.rotationX, origLight.rotationY, origLight.rotationZ]
+	*/
 	
 	-- ies file
 	if origLight.ies_file != "" and origLight.ies_file != undefined do (
@@ -538,7 +590,8 @@ fn convertVrayIES origLight = (
 		profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
 		makeDir (profile_path)
 		ies_file = origLight.ies_file
-		ies_name = (filterString ies_file "\\")[ies_name.count]
+		ies_name = (filterString ies_file "\\")
+		ies_name = ies_name[ies_name.count]
 		copyFile (ies_file) (profile_path + ies_name)
 		r.profile = ies_name
 	)
@@ -567,6 +620,13 @@ fn convertVrayLight origLight = (
 	if light_type != 1 then (
 		r = physical_light()
 		origLight.name += rprPostfixStr
+
+		-- user points
+		
+		r.LightPoint = [1, 1, 1]
+		r.SecondPoint = [1, 1, 1]
+		r.ThirdPoint = [0, 0, 0]
+		
 
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
@@ -795,8 +855,6 @@ fn convertVrayNormalMap origMap = (
 	if origMap.normal_map_on and not origMap.bump_map_on do (
 		r.isBump = false
 		r.map = origMap.normal_map
-		print(origMap.normal_map_multiplier)
-		print(origMap.normal_map_multiplier / 100)
 		r.strength = origMap.normal_map_multiplier / 100.0
 	)
 
@@ -1076,13 +1134,13 @@ fn convertVrayMaterial orig_mtl =(
 		VrayFastSSS2: errorCatching convertVrayFastSSS2 orig_mtl 
 		VrayBumpMtl: errorCatching convertVrayBumpMtl orig_mtl 
 		Vray2SidedMtl: errorCatching convertVray2SidedMtl orig_mtl 
-		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl 
+		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl
+		VrayOverrideMtl: errorCatching convertVrayOverrideMtl orig_mtl  
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
-		VrayOverrideMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayHairMtl: convertUnsupportedMtl orig_mtl 
 		VrayHairNextMtl: errorCatching convertUnsupportedMtl orig_mtl 
@@ -1131,7 +1189,7 @@ fn cleanUpConversionData =(
 
 	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
-	--delete (for elem in new_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
+	delete (for elem in orig_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
 
 	-- delete AOVs
 	re = maxOps.GetCurRenderElementMgr()
@@ -1161,8 +1219,6 @@ fn convertScene =(
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere collect i
 	for i in vrayShapeInstances do(
 		errorCatching convertVrayShape i
-		--newShape = errorCatching convertVrayShape i
-		--replaceInstances i newShape
 	)
 	
 	-- material conversion
