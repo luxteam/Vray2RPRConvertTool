@@ -194,6 +194,14 @@ fn convertVrayMtl origMtl =(
 		r.normalTexmap = origMtl.texmap_bump
 	)
 
+	if origMtl.texmap_displacement_on do (
+		r.displacementEnable = true
+		r.displacementTexmap = origMtl.texmap_displacement
+		r.displacementMin = 0
+		r.displacementMax = origMtl.texmap_displacement_multiplier / 10.0
+		r.displacementSubdiv = 5
+	)
+
 	r
 )
 
@@ -787,19 +795,21 @@ fn convertVrayNormalMap origMap = (
 	if origMap.normal_map_on and not origMap.bump_map_on do (
 		r.isBump = false
 		r.map = origMap.normal_map
-		r.strength = origMap.normal_map_multiplier  
+		print(origMap.normal_map_multiplier)
+		print(origMap.normal_map_multiplier / 100)
+		r.strength = origMap.normal_map_multiplier / 100.0
 	)
 
 	if not origMap.normal_map_on and origMap.bump_map_on do (
 		r.isBump = true
 		r.map = origMap.bump_map 
-		r.strength = origMap.bump_map_mult 
+		r.strength = origMap.bump_map_mult / 100.0
 	)
 
 	if origMap.normal_map_on and origMap.bump_map_on do (
 		r.isBump = false
 		r.map = origMap.normal_map
-		r.strength = origMap.normal_map_multiplier  
+		r.strength = origMap.normal_map_multiplier / 100.0
 	)
 
 	r
