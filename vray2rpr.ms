@@ -655,7 +655,7 @@ fn convertVraySun origLight = (
 		rpr.backgroundSkyFilterColor = origLight.filter_color
 		rpr.backgroundSkySunDisc = origLight.size_multiplier
 		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
-		rpr.backgroundSkyIntensity = origLight.intensity_multiplier
+		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 20
 
     )
 
@@ -930,7 +930,11 @@ fn convertOSLMap origMap = (
 
 fn convertVraySphere origShape = (
 	r = Sphere()
-	origShape.name += rprPostfixStr
+	r.name = origShape.name + rprPostfixStr
+
+	r.pos = origShape.pos
+	r.scale = origShape.scale
+	r.rotation = origShape.rotation
 
 	r.radius = origShape.radius
 	--r.normal_flip = origShape.flip_normals
@@ -946,7 +950,11 @@ fn convertVraySphere origShape = (
 
 fn convertVrayPlane origShape = (
 	r = Plane()
-	origShape.name += rprPostfixStr
+	r.name = origShape.name + rprPostfixStr
+
+	r.pos = origShape.pos
+	r.scale = origShape.scale
+	r.rotation = origShape.rotation
 
 	r.length = 1000000000.0
 	r.width = 1000000000.0
@@ -955,7 +963,7 @@ fn convertVrayPlane origShape = (
 	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
 		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
 		shadow_catcher_mat.shadowAlphaMul = 0.2
-		origShape.material = shadow_catcher_mat
+		r.material = shadow_catcher_mat
 	)
 
 	r
@@ -1113,7 +1121,7 @@ fn cleanUpConversionData =(
 
 	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
-	delete (for elem in new_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
+	--delete (for elem in new_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
 
 	-- delete AOVs
 	re = maxOps.GetCurRenderElementMgr()
@@ -1142,8 +1150,9 @@ fn convertScene =(
 	vrayShapes = #("VraySphere", "VrayPlane")
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere collect i
 	for i in vrayShapeInstances do(
-		newShape = errorCatching convertVrayShape i
-		replaceInstances i newShape
+		errorCatching convertVrayShape i
+		--newShape = errorCatching convertVrayShape i
+		--replaceInstances i newShape
 	)
 	
 	-- material conversion
