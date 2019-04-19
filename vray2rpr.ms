@@ -194,6 +194,14 @@ fn convertVrayMtl origMtl =(
 		r.normalTexmap = origMtl.texmap_bump
 	)
 
+	if origMtl.texmap_displacement_on do (
+		r.displacementEnable = true
+		r.displacementTexmap = origMtl.texmap_displacement
+		r.displacementMin = 0
+		r.displacementMax = origMtl.texmap_displacement_multiplier / 10.0
+		r.displacementSubdiv = 5
+	)
+
 	r
 )
 
@@ -237,6 +245,52 @@ fn convertVrayCarPaintMtl origMtl =(
 	)
 
 	--r.refractionAbsorptionColor = origMtl.base_color
+
+	r
+)
+
+fn convertVrayOverrideMtl origMtl =(
+
+	if origMtl.baseMtl == undefined do (
+		r = RPR_Uber_Material()
+		return r
+	)
+
+	materials = #()
+	if origMtl.giMtl != undefined do(
+		append materials origMtl.giMtl
+	)
+	if origMtl.reflectMtl != undefined do(
+		append materials origMtl.reflectMtl
+	)
+	if origMtl.refractMtl != undefined do(
+		append materials origMtl.refractMtl
+	)
+
+	if materials.count == 0 do(
+		return origMtl.baseMtl
+	)
+
+	r = RPR_Blend_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	r.material1 = origMtl.baseMtl
+	r.weight = 0.5
+
+	-- materials conversion
+	first_material = true
+	for i in materials do (
+		if first_material then (
+			r.material2 = i
+			first_material = false
+		) else (
+			old_r = r
+			r = RPR_Blend_Material()
+			r.material1 = old_r
+			r.material2 = i
+			r.weight = 0.5
+		)
+	)
 
 	r
 )
@@ -518,11 +572,17 @@ fn convertVrayLightMtl origMtl =(
 
 fn convertVrayIES origLight = (
 	r = ies_light()
-	r.name = origLight.name + rprPostfixStr
+	origLight.name += rprPostfixStr
 	
-	-- OnOff, Include/exclude
+	-- On/Off, Include/exclude
 	r.enabled = origLight.enabled
 	r.targeted = origLight.targeted
+
+	/*
+	r.pos = origLight.pos
+	r.scale = origLight.scale
+	r.rotation = [origLight.rotationX, origLight.rotationY, origLight.rotationZ]
+	*/
 	
 	-- ies file
 	if origLight.ies_file != "" and origLight.ies_file != undefined do (
@@ -530,7 +590,8 @@ fn convertVrayIES origLight = (
 		profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
 		makeDir (profile_path)
 		ies_file = origLight.ies_file
-		ies_name = (filterString ies_file "\\")[ies_name.count]
+		ies_name = (filterString ies_file "\\")
+		ies_name = ies_name[ies_name.count]
 		copyFile (ies_file) (profile_path + ies_name)
 		r.profile = ies_name
 	)
@@ -558,7 +619,14 @@ fn convertVrayLight origLight = (
 	light_type = origLight.type
 	if light_type != 1 then (
 		r = physical_light()
-		r.name = origLight.name + rprPostfixStr
+		origLight.name += rprPostfixStr
+
+		-- user points
+		
+		r.LightPoint = [1, 1, 1]
+		r.SecondPoint = [1, 1, 1]
+		r.ThirdPoint = [0, 0, 0]
+		
 
 		-- OnOff, Include/exclude
 		r.enabled = origLight.on 
@@ -655,7 +723,7 @@ fn convertVraySun origLight = (
 		rpr.backgroundSkyFilterColor = origLight.filter_color
 		rpr.backgroundSkySunDisc = origLight.size_multiplier
 		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
-		rpr.backgroundSkyIntensity = origLight.intensity_multiplier
+		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 20
 
     )
 
@@ -701,7 +769,7 @@ fn convertLights orig_light =(
 fn convertVrayPhysicalCamera origCamera =(
 
 	r = Freecamera()
-	r.name = origCamera.name + rprPostfixStr
+	origCamera.name += rprPostfixStr
 
 	r.targetDistance = origCamera.target_distance -- 275
 	r.showCone = origCamera.show_camera_cone -- 0 1 2
@@ -720,7 +788,7 @@ fn convertVrayPhysicalCamera origCamera =(
 fn convertVrayDomeCamera origCamera =(
 
 	r = Freecamera()
-	r.name = origCamera.name + unsupportedPostfixStr
+	origCamera.name += unsupportedPostfixStr
 
 	r
 )
@@ -787,19 +855,19 @@ fn convertVrayNormalMap origMap = (
 	if origMap.normal_map_on and not origMap.bump_map_on do (
 		r.isBump = false
 		r.map = origMap.normal_map
-		r.strength = origMap.normal_map_multiplier  
+		r.strength = origMap.normal_map_multiplier / 100.0
 	)
 
 	if not origMap.normal_map_on and origMap.bump_map_on do (
 		r.isBump = true
 		r.map = origMap.bump_map 
-		r.strength = origMap.bump_map_mult 
+		r.strength = origMap.bump_map_mult / 100.0
 	)
 
 	if origMap.normal_map_on and origMap.bump_map_on do (
 		r.isBump = false
 		r.map = origMap.normal_map
-		r.strength = origMap.normal_map_multiplier  
+		r.strength = origMap.normal_map_multiplier / 100.0
 	)
 
 	r
@@ -847,7 +915,7 @@ fn convertVrayCurvature origMap = (
 
 fn convertVrayHDRI origMap = (
 	r = BitmapTexture()
-	r.name = origMap.name
+	r.name = origMap.name + rprPostfixStr
 	
 	-- filename, output
 	if origMap.HDRIMapName != "" and origMap.HDRIMapName != undefined do(
@@ -930,6 +998,11 @@ fn convertOSLMap origMap = (
 
 fn convertVraySphere origShape = (
 	r = Sphere()
+	r.name = origShape.name + rprPostfixStr
+
+	r.pos = origShape.pos
+	r.scale = origShape.scale
+	r.rotation = origShape.rotation
 
 	r.radius = origShape.radius
 	--r.normal_flip = origShape.flip_normals
@@ -945,9 +1018,22 @@ fn convertVraySphere origShape = (
 
 fn convertVrayPlane origShape = (
 	r = Plane()
+	r.name = origShape.name + rprPostfixStr
+
+	r.pos = origShape.pos
+	r.scale = origShape.scale
+	r.rotation = origShape.rotation
 
 	r.length = 1000000000.0
 	r.width = 1000000000.0
+
+	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
+	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
+		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
+		shadow_catcher_mat.shadowAlphaMul = 0.2
+		r.material = shadow_catcher_mat
+	)
+
 	r
 	
 )
@@ -1048,13 +1134,13 @@ fn convertVrayMaterial orig_mtl =(
 		VrayFastSSS2: errorCatching convertVrayFastSSS2 orig_mtl 
 		VrayBumpMtl: errorCatching convertVrayBumpMtl orig_mtl 
 		Vray2SidedMtl: errorCatching convertVray2SidedMtl orig_mtl 
-		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl 
+		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl
+		VrayOverrideMtl: errorCatching convertVrayOverrideMtl orig_mtl  
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
-		VrayOverrideMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayHairMtl: convertUnsupportedMtl orig_mtl 
 		VrayHairNextMtl: errorCatching convertUnsupportedMtl orig_mtl 
@@ -1103,12 +1189,14 @@ fn cleanUpConversionData =(
 
 	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
-	delete (for elem in new_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
+	delete (for elem in orig_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
 
 	-- delete AOVs
 	re = maxOps.GetCurRenderElementMgr()
     re.removeallrenderelements()
 
+    orig_shps=#()
+    new_shps=#()
 	orig_mtls=#()
 	new_mtls=#()
 	orig_maps=#()
@@ -1128,16 +1216,9 @@ fn convertScene =(
 
 	-- shapes conversion
 	vrayShapes = #("VraySphere", "VrayPlane")
-	for c in vrayShapes do(
-		cls = execute c 
-		if classof cls == GeometryClass do(
-			-- get all instances from scene
-			clssInst = getclassinstances cls
-			for i in clssInst do(
-				newShape = errorCatching convertVrayShape i
-				replaceInstances i newShape
-			)
-		)
+	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere collect i
+	for i in vrayShapeInstances do(
+		errorCatching convertVrayShape i
 	)
 	
 	-- material conversion
