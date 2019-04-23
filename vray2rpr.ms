@@ -188,6 +188,7 @@ fn convertVrayMtl origMtl =(
 	r.emissiveWeight = 0.65
 
 	if origMtl.texmap_opacity != undefined do (
+		r.TransparencyEnable = true
 		arith = RPR_Arithmetic()
 		arith.operator = 1
 		arith.Color1 = color 255 255 255
@@ -421,6 +422,7 @@ fn convertVrayFastSSS2 origMtl =(
 	)
 
 	if origMtl.texmap_opacity != undefined do (
+		r.TransparencyEnable = true
 		arith = RPR_Arithmetic()
 		arith.operator = 1
 		arith.Color1 = color 255 255 255
@@ -551,6 +553,7 @@ fn convertVrayPluginNodeMtl origMtl =(
 		)
 
 		if origMtl.opacity_use and origMtl.opacity != undefined do (
+			r.TransparencyEnable = true
 			arith = RPR_Arithmetic()
 			arith.operator = 1
 			arith.Color1 = color 255 255 255
@@ -576,6 +579,7 @@ fn convertVrayLightMtl origMtl =(
 	r.emissiveIntensity = origMtl.multiplier
 
 	if origMtl.opacity_texmap != undefined do (
+		r.TransparencyEnable = true
 		arith = RPR_Arithmetic()
 		arith.operator = 1
 		arith.Color1 = color 255 255 255
@@ -629,7 +633,7 @@ fn convertVrayIES origLight = (
 	) else (
 		intensity = origLight.intensity_value / 1.398
 	)
-	
+
 	r.intensity = intensity / 999
 	r.colorMode = origLight.color_mode
 	r.color = origLight.color
