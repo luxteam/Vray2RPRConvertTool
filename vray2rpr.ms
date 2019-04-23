@@ -619,12 +619,18 @@ fn convertVrayIES origLight = (
 	)
 
 	-- location
-	r.rotationX = origLight.rotation_X
-	r.rotationY = origLight.rotation_Y
+	r.rotationX = origLight.rotation_X + 90.0
+	r.rotationY = origLight.rotation_Y - 90.0
 	r.rotationZ = origLight.rotation_Z
 
 	-- Intensitiy, Color, Texmap
-	r.intensity = origLight.intensity_value
+	if origLight.intensity_type == 0 then (
+		intensity = origLight.intensity_value
+	) else (
+		intensity = origLight.intensity_value / 1.398
+	)
+	
+	r.intensity = intensity / 999
 	r.colorMode = origLight.color_mode
 	r.color = origLight.color
 	r.temperature = origLight.color_temperature
