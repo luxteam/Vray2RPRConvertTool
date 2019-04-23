@@ -1296,6 +1296,8 @@ fn convertScene =(
 	renderers.current.raycastEpsilon = 0.001
 	renderers.current.texturecompression = true
 
+	SceneExposureControl.exposureControl = undefined
+
 	cleanUpConversionData()
 	
 )
