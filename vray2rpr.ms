@@ -138,9 +138,11 @@ fn convertVrayMtl origMtl =(
 	) else (
 		r.reflectionRoughness = 1 - origMtl.reflection_glossiness
 		if origMtl.texmap_reflectionGlossiness != undefined do (
-			osl_map = createOSLInvertColor()
-			osl_map.input_map = origMtl.texmap_reflectionGlossiness
-			r.reflectionRoughnessTexmap = osl_map
+			arith = RPR_Arithmetic()
+			arith.operator = 1
+			arith.Color1 = color 255 255 255
+			arith.color1texmap = origMtl.texmap_reflectionGlossiness
+			r.reflectionRoughnessTexmap = arith
 		)
 	)
 	if origMtl.reflection_metalness > 0.01 do ( 
@@ -165,9 +167,11 @@ fn convertVrayMtl origMtl =(
 	r.refractionColorTexmap = origMtl.texmap_refraction
 	r.refractionRoughness = 1 - origMtl.refraction_glossiness
 	if origMtl.texmap_refractionGlossiness != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_refractionGlossiness
-		r.refractionRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_refractionGlossiness
+		r.refractionRoughnessTexmap = arith
 	)
 	r.refractionIor = origMtl.refraction_ior
 	r.refractionIorTexmap = origMtl.texmap_refractionIOR
@@ -184,9 +188,11 @@ fn convertVrayMtl origMtl =(
 	r.emissiveWeight = 0.65
 
 	if origMtl.texmap_opacity != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_opacity
-		r.transparencyTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_opacity
+		r.transparencyTexmap = arith
 	)
 
 	if origMtl.texmap_bump_on do (
@@ -217,9 +223,11 @@ fn convertVrayCarPaintMtl origMtl =(
 	r.ReflectionWeightTexmap = origMtl.texmap_base_reflection
 	r.reflectionRoughness = 1 - origMtl.base_glossiness
 	if origMtl.texmap_base_glossiness != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_base_glossiness
-		r.reflectionRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_base_glossiness
+		r.reflectionRoughnessTexmap = arith
 	)
 
 	/*
@@ -239,9 +247,11 @@ fn convertVrayCarPaintMtl origMtl =(
 	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
 	r.CoatingRoughness = 1 - origMtl.coat_glossiness
 	if origMtl.texmap_coat_glossiness != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_coat_glossiness
-		r.CoatingRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_coat_glossiness
+		r.CoatingRoughnessTexmap = arith
 	)
 
 	--r.refractionAbsorptionColor = origMtl.base_color
@@ -403,15 +413,19 @@ fn convertVrayFastSSS2 origMtl =(
 	
 	r.reflectionRoughness = 1 - origMtl.specular_glossiness
 	if origMtl.texmap_specular_color != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_specular_color
-		r.reflectionRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_specular_color
+		r.reflectionRoughnessTexmap = arith
 	)
 
 	if origMtl.texmap_opacity != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_opacity
-		r.transparencyTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_opacity
+		r.transparencyTexmap = arith
 	)
 
 	if origMtl.texmap_bump_on do (
@@ -468,9 +482,11 @@ fn convertVrayPluginNodeMtl origMtl =(
 			) else (
 				r.reflectionRoughness = 1 - origMtl.reflect_glossiness_rgb
 				if origMtl.reflect_glossiness != undefined do (
-					osl_map = createOSLInvertColor()
-					osl_map.input_map = origMtl.reflect_glossiness
-					r.reflectionRoughnessTexmap = osl_map
+					arith = RPR_Arithmetic()
+					arith.operator = 1
+					arith.Color1 = color 255 255 255
+					arith.color1texmap = origMtl.reflect_glossiness
+					r.reflectionRoughnessTexmap = arith
 				)
 			)
 		)
@@ -507,9 +523,11 @@ fn convertVrayPluginNodeMtl origMtl =(
 		if origMtl.refract_glossiness_use do (
 			r.refractionRoughness = 1 - origMtl.refract_glossiness_rgb
 			if origMtl.refract_glossiness != undefined do (
-				osl_map = createOSLInvertColor()
-				osl_map.input_map = origMtl.refract_glossiness
-				r.refractionRoughnessTexmap = osl_map
+				arith = RPR_Arithmetic()
+				arith.operator = 1
+				arith.Color1 = color 255 255 255
+				arith.color1texmap = origMtl.refract_glossiness
+				r.refractionRoughnessTexmap = arith
 			)
 		)
 		if origMtl.refract_ior_use do (
@@ -533,9 +551,11 @@ fn convertVrayPluginNodeMtl origMtl =(
 		)
 
 		if origMtl.opacity_use and origMtl.opacity != undefined do (
-			osl_map = createOSLInvertColor()
-			osl_map.input_map = origMtl.opacity
-			r.transparencyTexmap = osl_map
+			arith = RPR_Arithmetic()
+			arith.operator = 1
+			arith.Color1 = color 255 255 255
+			arith.color1texmap = origMtl.opacity
+			r.transparencyTexmap = arith
 		)
 
 		r
@@ -556,9 +576,11 @@ fn convertVrayLightMtl origMtl =(
 	r.emissiveIntensity = origMtl.multiplier
 
 	if origMtl.opacity_texmap != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.opacity_texmap
-		r.TransparencyTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.opacity_texmap
+		r.TransparencyTexmap = arith
 	)
 
 	-- displacement
@@ -976,6 +998,26 @@ fn convertColorOSL origMap operator = (
 	r
 )
 
+fn convertColorClampOSL origMap = (
+	r = RPR_Arithmetic()
+	r.name = origMap.name + rprPostfixStr
+
+	r.operator = 12
+
+	arith = RPR_Arithmetic()
+	arith.operator = 13
+	arith.Color1 = origMap.Input
+	arith.Color2 = origMap.min
+	arith.color0texmap = origMap.Input_map
+	arith.color1texmap = origMap.Min_map
+
+	r.color0texmap = arith
+	r.Color2 = origMap.max
+	r.color1texmap = origMap.Max_map
+
+	r
+)
+
 fn convertOSLMap origMap = (
 
 	OSLPath = origMap.OSLPath
@@ -988,6 +1030,7 @@ fn convertOSLMap origMap = (
 		"ColorDiv.osl": convertColorOSL origMap 3
 		"ColorMin.osl": convertColorOSL origMap 12
 		"ColorMax.osl": convertColorOSL origMap 13
+		"ColorClamp.osl": convertColorClampOSL origMap
 
 		default: origMap
 	)
