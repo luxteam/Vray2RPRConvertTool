@@ -1038,6 +1038,20 @@ fn convertVrayPlane origShape = (
 	
 )
 
+fn convertPlane origShape = (
+	
+	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
+	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
+		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
+		shadow_catcher_mat.shadowAlphaMul = 0.2
+		origShape.material = shadow_catcher_mat
+	)
+
+	r = origShape
+	r
+
+)
+
 fn convertVrayUtilities orig_map =(
 	if ((superclassof orig_map)!=textureMap) then return orig_map  -- check if this is a material; if not, just return the value
 	
@@ -1172,7 +1186,8 @@ fn convertVrayShape orig_shp =(
 	cls=classof orig_shp
 	local new_shp=case cls of (
 		VraySphere: errorCatching convertVraySphere orig_shp
-		VrayPlane: errorCatching convertVrayPlane orig_shp 
+		VrayPlane: errorCatching convertVrayPlane orig_shp
+		Plane: errorCatching convertPlane orig_shp
 		
 		default: orig_shp
 	)
@@ -1215,8 +1230,8 @@ fn convertScene =(
 	start = timeStamp()
 
 	-- shapes conversion
-	vrayShapes = #("VraySphere", "VrayPlane")
-	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere collect i
+	vrayShapes = #("VraySphere", "VrayPlane", "Plane")
+	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
 	for i in vrayShapeInstances do(
 		errorCatching convertVrayShape i
 	)
