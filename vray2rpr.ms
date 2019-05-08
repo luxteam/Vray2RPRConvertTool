@@ -138,9 +138,11 @@ fn convertVrayMtl origMtl =(
 	) else (
 		r.reflectionRoughness = 1 - origMtl.reflection_glossiness
 		if origMtl.texmap_reflectionGlossiness != undefined do (
-			osl_map = createOSLInvertColor()
-			osl_map.input_map = origMtl.texmap_reflectionGlossiness
-			r.reflectionRoughnessTexmap = osl_map
+			arith = RPR_Arithmetic()
+			arith.operator = 1
+			arith.Color1 = color 255 255 255
+			arith.color1texmap = origMtl.texmap_reflectionGlossiness
+			r.reflectionRoughnessTexmap = arith
 		)
 	)
 	if origMtl.reflection_metalness > 0.01 do ( 
@@ -165,9 +167,11 @@ fn convertVrayMtl origMtl =(
 	r.refractionColorTexmap = origMtl.texmap_refraction
 	r.refractionRoughness = 1 - origMtl.refraction_glossiness
 	if origMtl.texmap_refractionGlossiness != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_refractionGlossiness
-		r.refractionRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_refractionGlossiness
+		r.refractionRoughnessTexmap = arith
 	)
 	r.refractionIor = origMtl.refraction_ior
 	r.refractionIorTexmap = origMtl.texmap_refractionIOR
@@ -184,9 +188,12 @@ fn convertVrayMtl origMtl =(
 	r.emissiveWeight = 0.65
 
 	if origMtl.texmap_opacity != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_opacity
-		r.transparencyTexmap = osl_map
+		r.TransparencyEnable = true
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_opacity
+		r.transparencyTexmap = arith
 	)
 
 	if origMtl.texmap_bump_on do (
@@ -217,9 +224,11 @@ fn convertVrayCarPaintMtl origMtl =(
 	r.ReflectionWeightTexmap = origMtl.texmap_base_reflection
 	r.reflectionRoughness = 1 - origMtl.base_glossiness
 	if origMtl.texmap_base_glossiness != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_base_glossiness
-		r.reflectionRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_base_glossiness
+		r.reflectionRoughnessTexmap = arith
 	)
 
 	/*
@@ -239,9 +248,11 @@ fn convertVrayCarPaintMtl origMtl =(
 	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
 	r.CoatingRoughness = 1 - origMtl.coat_glossiness
 	if origMtl.texmap_coat_glossiness != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_coat_glossiness
-		r.CoatingRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_coat_glossiness
+		r.CoatingRoughnessTexmap = arith
 	)
 
 	--r.refractionAbsorptionColor = origMtl.base_color
@@ -403,15 +414,20 @@ fn convertVrayFastSSS2 origMtl =(
 	
 	r.reflectionRoughness = 1 - origMtl.specular_glossiness
 	if origMtl.texmap_specular_color != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_specular_color
-		r.reflectionRoughnessTexmap = osl_map
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_specular_color
+		r.reflectionRoughnessTexmap = arith
 	)
 
 	if origMtl.texmap_opacity != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.texmap_opacity
-		r.transparencyTexmap = osl_map
+		r.TransparencyEnable = true
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.texmap_opacity
+		r.transparencyTexmap = arith
 	)
 
 	if origMtl.texmap_bump_on do (
@@ -468,9 +484,11 @@ fn convertVrayPluginNodeMtl origMtl =(
 			) else (
 				r.reflectionRoughness = 1 - origMtl.reflect_glossiness_rgb
 				if origMtl.reflect_glossiness != undefined do (
-					osl_map = createOSLInvertColor()
-					osl_map.input_map = origMtl.reflect_glossiness
-					r.reflectionRoughnessTexmap = osl_map
+					arith = RPR_Arithmetic()
+					arith.operator = 1
+					arith.Color1 = color 255 255 255
+					arith.color1texmap = origMtl.reflect_glossiness
+					r.reflectionRoughnessTexmap = arith
 				)
 			)
 		)
@@ -507,9 +525,11 @@ fn convertVrayPluginNodeMtl origMtl =(
 		if origMtl.refract_glossiness_use do (
 			r.refractionRoughness = 1 - origMtl.refract_glossiness_rgb
 			if origMtl.refract_glossiness != undefined do (
-				osl_map = createOSLInvertColor()
-				osl_map.input_map = origMtl.refract_glossiness
-				r.refractionRoughnessTexmap = osl_map
+				arith = RPR_Arithmetic()
+				arith.operator = 1
+				arith.Color1 = color 255 255 255
+				arith.color1texmap = origMtl.refract_glossiness
+				r.refractionRoughnessTexmap = arith
 			)
 		)
 		if origMtl.refract_ior_use do (
@@ -533,9 +553,12 @@ fn convertVrayPluginNodeMtl origMtl =(
 		)
 
 		if origMtl.opacity_use and origMtl.opacity != undefined do (
-			osl_map = createOSLInvertColor()
-			osl_map.input_map = origMtl.opacity
-			r.transparencyTexmap = osl_map
+			r.TransparencyEnable = true
+			arith = RPR_Arithmetic()
+			arith.operator = 1
+			arith.Color1 = color 255 255 255
+			arith.color1texmap = origMtl.opacity
+			r.transparencyTexmap = arith
 		)
 
 		r
@@ -556,9 +579,12 @@ fn convertVrayLightMtl origMtl =(
 	r.emissiveIntensity = origMtl.multiplier
 
 	if origMtl.opacity_texmap != undefined do (
-		osl_map = createOSLInvertColor()
-		osl_map.input_map = origMtl.opacity_texmap
-		r.TransparencyTexmap = osl_map
+		r.TransparencyEnable = true
+		arith = RPR_Arithmetic()
+		arith.operator = 1
+		arith.Color1 = color 255 255 255
+		arith.color1texmap = origMtl.opacity_texmap
+		r.TransparencyTexmap = arith
 	)
 
 	-- displacement
@@ -597,12 +623,18 @@ fn convertVrayIES origLight = (
 	)
 
 	-- location
-	r.rotationX = origLight.rotation_X
-	r.rotationY = origLight.rotation_Y
+	r.rotationX = origLight.rotation_X + 90.0
+	r.rotationY = origLight.rotation_Y - 90.0
 	r.rotationZ = origLight.rotation_Z
 
 	-- Intensitiy, Color, Texmap
-	r.intensity = origLight.intensity_value
+	if origLight.intensity_type == 0 then (
+		intensity = origLight.intensity_value
+	) else (
+		intensity = origLight.intensity_value / 1.398
+	)
+
+	r.intensity = intensity / 999
 	r.colorMode = origLight.color_mode
 	r.color = origLight.color
 	r.temperature = origLight.color_temperature
@@ -976,6 +1008,26 @@ fn convertColorOSL origMap operator = (
 	r
 )
 
+fn convertColorClampOSL origMap = (
+	r = RPR_Arithmetic()
+	r.name = origMap.name + rprPostfixStr
+
+	r.operator = 12
+
+	arith = RPR_Arithmetic()
+	arith.operator = 13
+	arith.Color1 = origMap.Input
+	arith.Color2 = origMap.min
+	arith.color0texmap = origMap.Input_map
+	arith.color1texmap = origMap.Min_map
+
+	r.color0texmap = arith
+	r.Color2 = origMap.max
+	r.color1texmap = origMap.Max_map
+
+	r
+)
+
 fn convertOSLMap origMap = (
 
 	OSLPath = origMap.OSLPath
@@ -988,6 +1040,7 @@ fn convertOSLMap origMap = (
 		"ColorDiv.osl": convertColorOSL origMap 3
 		"ColorMin.osl": convertColorOSL origMap 12
 		"ColorMax.osl": convertColorOSL origMap 13
+		"ColorClamp.osl": convertColorClampOSL origMap
 
 		default: origMap
 	)
@@ -1036,6 +1089,20 @@ fn convertVrayPlane origShape = (
 
 	r
 	
+)
+
+fn convertPlane origShape = (
+	
+	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
+	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
+		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
+		shadow_catcher_mat.shadowAlphaMul = 0.2
+		origShape.material = shadow_catcher_mat
+	)
+
+	r = origShape
+	r
+
 )
 
 fn convertVrayUtilities orig_map =(
@@ -1172,7 +1239,8 @@ fn convertVrayShape orig_shp =(
 	cls=classof orig_shp
 	local new_shp=case cls of (
 		VraySphere: errorCatching convertVraySphere orig_shp
-		VrayPlane: errorCatching convertVrayPlane orig_shp 
+		VrayPlane: errorCatching convertVrayPlane orig_shp
+		Plane: errorCatching convertPlane orig_shp
 		
 		default: orig_shp
 	)
@@ -1215,8 +1283,8 @@ fn convertScene =(
 	start = timeStamp()
 
 	-- shapes conversion
-	vrayShapes = #("VraySphere", "VrayPlane")
-	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere collect i
+	vrayShapes = #("VraySphere", "VrayPlane", "Plane")
+	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
 	for i in vrayShapeInstances do(
 		errorCatching convertVrayShape i
 	)
@@ -1295,6 +1363,8 @@ fn convertScene =(
 	renderers.current = Radeon_ProRender()
 	renderers.current.raycastEpsilon = 0.001
 	renderers.current.texturecompression = true
+
+	SceneExposureControl.exposureControl = undefined
 
 	cleanUpConversionData()
 	
