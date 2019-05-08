@@ -1224,7 +1224,40 @@ fn convertVraySun origLight = (
 )
 
 fn convertVrayAmbientLight origLight = (
-	"no_replace"
+	local r = Skylight()
+	r.name = origLight.name + rprPostfixStr
+
+	-- log to file 
+	start_log origLight r
+
+	-- OnOff, Include/exclude
+	copy_property r origLight "on" "enabled"
+	
+	-- position conversion
+	copy_property r origLight "pos" "pos"
+	copy_property r origLight "rotation" "rotation"
+	copy_property r origLight "scale" "scale"
+	copy_property r origLight "pivot" "pivot"
+	copy_property r origLight "transform" "transform"
+	copy_property r origLight "dir" "dir"
+
+	copy_property r origLight "multiplier" "intensity"
+
+	if get_property origLight "light_map_on" and get_property origLight "light_map" != undefined then (
+		set_property r "sky_mode" 1
+		set_property r "sky_color_map_on" true
+		copy_property r origLight "color" "color" 
+		copy_property r origLight "sky_color_map" "light_map" 
+		copy_property r origLight "sky_color_map_amt" "light_map_multiplier"
+	) else (
+		set_property r "sky_mode" 0
+		backgroundColor = (get_property origLight "color")
+	)
+
+	-- logging
+	end_log origLight
+
+	r
 )
 
 
