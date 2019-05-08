@@ -39,8 +39,6 @@ orig_shps=#()
 new_shps=#()
 orig_mtls=#()
 new_mtls=#()
-orig_maps=#()
-new_maps=#()
 orig_lights=#()
 new_lights=#()
 orig_cameras=#()
@@ -49,9 +47,122 @@ new_cameras=#()
 unsupportedPostfixStr = "_unsupported"
 rprPostfixStr = "_rpr"
 
+log_file = maxFilePath + maxFileName + ".log"
+
+fn write_own_property_log msg =(
+	try (
+		log_obj = openFile log_file mode: "a"
+		format "%\r\n" (msg as string) to: log_obj
+		flush log_obj
+		close log_obj
+		free log_obj
+	) catch ()
+)
+
+-- conv = converting
+fn write_converted_property_log rpr_obj conv_obj rpr_attr conv_attr =(
+	try (
+		log_obj = openFile log_file mode: "a"
+		msg = StringStream ""
+		format "\tProperty %.% is converted to %.%" (conv_obj as string) conv_attr (rpr_obj as string) rpr_attr to: msg
+		format "%\r\n" (msg as string) to: log_obj
+		flush log_obj
+		close log_obj
+		free log_obj
+	) catch (
+		print("Exception:" + getCurrentException())
+		print("Stack trace: " + getCurrentExceptionStackTrace())
+	)
+)
+
+fn startConversion =(
+	msg = "START CONVERSION.\r\n"
+	msg += "Start time: " + (localtime as string) + "\r\n"
+
+	try (
+		log_obj = openFile log_file mode: "w"
+		format "%" (msg as string) to: log_obj
+		flush log_obj
+		close log_obj
+		free log_obj
+	) catch ()
+
+)
+
+fn finishConversion time =(
+	msg = "\n\nCONVERSION IS FINISHED.\r\n"
+	msg += "Total time: " + (time as string) + " seconds.\r\n"
+
+	write_own_property_log msg
+)
+
+fn start_log conv_obj rpr_obj =(
+	msg = "\n\nFound node:\r\n"
+	msg += "\tname: " + (conv_obj as string) + "\r\n"
+	msg += "\ttype: " + classof conv_obj as string + "\r\n"
+	msg += "Converting to:\r\n" 
+    msg += "\tname: " + (rpr_obj as string) + "\r\n"
+    msg += "\ttype: " + classof rpr_obj as string + "\r\n"
+    msg += "Conversion details:"
+
+	write_own_property_log msg
+)
+
+fn end_log conv_obj =(
+	msg = StringStream ""
+	format "Conversion of % is finished. \r\n" (conv_obj as string) to: msg
+	write_own_property_log msg
+)
+
+fn get_property value_mat value_attr =(
+	try (
+		obj_value = getProperty value_mat value_attr
+		return obj_value
+	) catch (
+		print("Exception:" + getCurrentException())
+		print("Stack trace: " + getCurrentExceptionStackTrace())
+		msg = StringStream ""
+		format "[ERROR] There is no %.% field in this node. Check the field and try again." value_mat.name value_attr to: msg
+		write_own_property_log msg
+	)
+)
+
+fn copy_property rpr_mat conv_mat rpr_attr conv_attr =(
+	try (
+		rpr_value = get_property rpr_mat rpr_attr
+		conv_value = get_property conv_mat conv_attr
+		if classof rpr_value == UndefinedClass then (
+			convObj = errorCatching convertMaterial conv_value
+			set_property rpr_mat rpr_attr convObj
+		) else (
+			set_property rpr_mat rpr_attr conv_value
+		)
+		write_converted_property_log rpr_mat conv_mat rpr_attr conv_attr
+	) catch (
+		print("Exception:" + getCurrentException())
+		print("Stack trace: " + getCurrentExceptionStackTrace())
+		msg = StringStream ""
+		format "[ERROR] Error while converting from %.% to %.%" conv_mat.name conv_attr rpr_mat.name rpr_attr to: msg
+		write_own_property_log msg
+	)
+)
+
+fn set_property obj obj_property value =(
+	try (
+		msg = StringStream ""
+		setProperty obj obj_property value
+		format "\tSet value % to %.%" value obj obj_property to: msg
+		write_own_property_log msg
+	) catch (
+		print("Exception:" + getCurrentException())
+		print("Stack trace: " + getCurrentExceptionStackTrace())
+		format "\t[ERROR] Set value % to %.% is failed. Check the values and their boundaries." value obj.name property_name to: msg
+		write_own_property_log msg
+	)
+)
+
 fn errorCatching functionName orig =(
 	errcls = classof orig
-	
 	try(
 		out = functionName orig
 	)catch(
@@ -59,35 +170,7 @@ fn errorCatching functionName orig =(
 		print ("Stack trace: " + getCurrentExceptionStackTrace())
 		out = orig
 	)
-	
 	out
-)
-
-fn createOSLInvertColor =(
-
-	osl_map = OSLMap()
-	osl_map.OSLPath = GetDir #maxroot + "OSL\\ColorComp.osl"
-	osl_map.OSLCode =  "// Complements a color.
-						// ColorComp.osl, by Zap Andersson
-						// Modified: 2018-02-08
-						// Copyright 2018 Autodesk Inc, All rights reserved. This file is licensed under Apache 2.0 license
-						//    https://github.com/ADN-DevTech/3dsMax-OSL-Shaders/blob/master/LICENSE.txt
-
-						shader ColorComp
-						[[ string help = \"Inverts (Complements) a color number (1 - Input)\",
-						   string label= \"Invert (color)\",
-						   string category = \"Math\Color\" ]]
-						(
-							color Input = 0.0,
-							output color Out = 0.0,
-						)
-						{
-							Out = 1 - Input;
-						}
-						"
-	osl_map.OSLAutoUpdate = true
-	
-	osl_map
 )
 
 fn remap_value currentValue maxInput minInput maxOutput minOutput =(
@@ -103,111 +186,183 @@ fn remap_value currentValue maxInput minInput maxOutput minOutput =(
 	remapped_value
 )
 
+fn convertTemperature temperature =(
+	temperature = temperature / 100
+
+	if temperature <= 66 then (
+		colorR = 255
+	) else (
+		colorR = temperature - 60
+		colorR = 329.698727446 * colorR ^ -0.1332047592
+		if colorR < 0 do colorR = 0
+		if colorR > 255 do colorR = 255
+	)
+
+	if temperature <= 66 then (
+		colorG = temperature
+		colorG = 99.4708025861 * log colorG - 161.1195681661
+		if colorG < 0 do colorG = 0
+		if colorG > 255 do colorG = 255
+	) else (
+		colorG = temperature - 60
+		colorG = 288.1221695283 * colorG ^ -0.0755148492
+		if colorG < 0 do colorG = 0
+		if colorG > 255 do colorG = 255
+	)
+
+	if temperature >= 66 then (
+		colorB = 255
+	) else if temperature <= 19 then (
+		colorB = 0
+	) else (
+		colorB = temperature - 10
+		colorB = 138.5177312231 * log colorB - 305.0447927307
+		if colorB < 0 do colorB = 0
+		if colorB > 255 do colorB = 255
+	)
+
+	(color colorR colorG colorB)
+)
+
+fn defaultEnable rpr_obj rpr_attr orig_obj orig_attr orig_map =(
+	orig_color = get_property orig_obj orig_attr
+	if orig_color.red > 0 or orig_color.green > 0 or orig_color.blue > 0 or get_property orig_obj orig_map != undefined do (
+		set_property rpr_obj rpr_attr true
+	)
+)
+
+fn invertMap rpr_obj orig_obj rpr_map orig_map =(
+	if get_property orig_obj orig_map != undefined do (
+		arith = RPR_Arithmetic()
+		set_property arith "operator" 1
+		set_property arith "Color1" (color 255 255 255)
+		copy_property arith orig_obj "color1texmap" orig_map
+		set_property rpr_obj rpr_map arith
+	)
+)
+
+
+/* 
+    MATERIALS
+*/
+
 fn convertUnsupportedMtl origMtl =(
-	r = RPR_Uber_Material()
+	local r = RPR_Uber_Material()
 	r.name = origMtl.name + unsupportedPostfixStr
-	r.diffuseColor = color 0 45 0
+
+	-- log to file 
+	start_log origMtl r
+
+	set_property r "diffuseColor" (color 0 45 0)
+
+	-- logging
+	end_log origMtl
+
 	r
 )
 
-fn convertUnsupportedUtility origMtl =(
-	r = RPR_Arithmetic()
-	r.name = origMtl.name + unsupportedPostfixStr
-	r
+fn convertMultimaterial origMtl =(
+
+	-- log to file 
+	start_log origMtl origMtl
+
+	materialList = get_property origMtl "materialList"
+	for m=1 to materialList.count do (
+		materialList[m] = convertMaterial materialList[m]
+	)
+	set_property origMtl "materialList" materialList
+
+	-- logging
+	end_log origMtl
+
+	origMtl
 )
 
 fn convertVrayMtl origMtl =(
 	r = RPR_Uber_Material()
 	r.name = origMtl.name + rprPostfixStr
 
-	useRoughness = origMtl.brdf_useRoughness
+	-- log to file 
+	start_log origMtl r
+
+	useRoughness = get_property origMtl "brdf_useRoughness"
 
 	-- diffuse
-	r.diffuseColor = origMtl.diffuse
-	r.diffuseColorTexmap = origMtl.texmap_diffuse
-	r.diffuseRoughness = origMtl.diffuse_roughness
-	r.diffuseRoughnessTexmap = origMtl.texmap_roughness
-	
-	-- reflection
-	if origMtl.reflection.red > 0 or origMtl.reflection.green > 0 or origMtl.reflection.blue > 0 do ( r.reflectionEnable = true )
-	r.reflectionColor = origMtl.reflection
-	r.reflectionColorTexmap = origMtl.texmap_reflection
-	if useRoughness then (
-		r.reflectionRoughness = origMtl.reflection_glossiness
-		r.reflectionRoughnessTexmap = origMtl.texmap_reflectionGlossiness
-	) else (
-		r.reflectionRoughness = 1 - origMtl.reflection_glossiness
-		if origMtl.texmap_reflectionGlossiness != undefined do (
-			arith = RPR_Arithmetic()
-			arith.operator = 1
-			arith.Color1 = color 255 255 255
-			arith.color1texmap = origMtl.texmap_reflectionGlossiness
-			r.reflectionRoughnessTexmap = arith
-		)
-	)
-	if origMtl.reflection_metalness > 0.01 do ( 
-		r.reflectionEnable = true
-		r.reflectionMode = 2
-		r.reflectionColor = origMtl.diffuse
-		r.reflectionColorTexmap = origMtl.texmap_diffuse
-	)
-	r.reflectionIor = origMtl.reflection_ior
-	r.reflectionIorTexmap = origMtl.texmap_reflectionIOR
-	r.reflectionMetalness = origMtl.reflection_metalness
-	r.reflectionMetalnessTexmap = origMtl.texmap_metalness
+	copy_property r origMtl "diffuseColor" "diffuse"
+	copy_property r origMtl "diffuseColorTexmap" "texmap_diffuse"
+	copy_property r origMtl "diffuseRoughness" "diffuse_roughness"
+	copy_property r origMtl "diffuseRoughnessTexmap" "texmap_roughness"
 
-	r.reflectionAnisotropy = origMtl.anisotropy
-	r.reflectionAnisotropyTexmap = origMtl.texmap_anisotropy
-	r.reflectionAnisotropyRotation = origMtl.anisotropy_rotation
-	r.reflectionAnisotropyRotationTexmap = origMtl.texmap_anisotropy_rotation
+	-- reflection
+	defaultEnable r "reflectionEnable" origMtl "reflection" "texmap_reflection"
+	copy_property r origMtl "reflectionColor" "reflection"
+	copy_property r origMtl "reflectionColorTexmap" "texmap_reflection"
+	if useRoughness then (
+		copy_property r origMtl "reflectionRoughness" "reflection_glossiness"
+		copy_property r origMtl "reflectionRoughnessTexmap" "texmap_reflectionGlossiness"
+	) else (
+		set_property r "reflectionRoughness" (1 - get_property origMtl "reflection_glossiness")
+		invertMap r origMtl "reflectionRoughnessTexmap" "texmap_reflectionGlossiness"
+	)
+
+	if get_property origMtl "reflection_metalness" > 0.01 do ( 
+		set_property r "reflectionEnable" true
+		set_property r "reflectionMode" 2
+		copy_property r origMtl "reflectionColor" "diffuse"
+		copy_property r origMtl "reflectionColorTexmap" "texmap_diffuse"
+	)
+
+	copy_property r origMtl "reflectionIor" "reflection_ior"
+	copy_property r origMtl "reflectionIorTexmap" "texmap_reflectionIOR"
+	copy_property r origMtl "reflectionMetalness" "reflection_metalness"
+	copy_property r origMtl "reflectionMetalnessTexmap" "texmap_metalness"
+
+	copy_property r origMtl "reflectionAnisotropy" "anisotropy"
+	copy_property r origMtl "reflectionAnisotropyTexmap" "texmap_anisotropy"
+	copy_property r origMtl "reflectionAnisotropyRotation" "anisotropy_rotation"
+	copy_property r origMtl "reflectionAnisotropyRotationTexmap" "texmap_anisotropy_rotation"
 
 	-- refraction
-	if origMtl.refraction.red > 0 or origMtl.refraction.green > 0 or origMtl.refraction.blue > 0 do ( r.refractionEnable = true )
-	r.refractionColor = origMtl.refraction
-	r.refractionColorTexmap = origMtl.texmap_refraction
-	r.refractionRoughness = 1 - origMtl.refraction_glossiness
-	if origMtl.texmap_refractionGlossiness != undefined do (
-		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.texmap_refractionGlossiness
-		r.refractionRoughnessTexmap = arith
-	)
-	r.refractionIor = origMtl.refraction_ior
-	r.refractionIorTexmap = origMtl.texmap_refractionIOR
+	defaultEnable r "refractionEnable" origMtl "refraction" "texmap_refraction"
+	copy_property r origMtl "refractionColor" "refraction"
+	copy_property r origMtl "refractionColorTexmap" "texmap_refraction"
+	set_property r "refractionRoughness" (1 - get_property origMtl "refraction_glossiness")
+	invertMap r origMtl "refractionRoughnessTexmap" "texmap_refractionGlossiness"
+	
+	copy_property r origMtl "refractionIor" "refraction_ior"
+	copy_property r origMtl "refractionIorTexmap" "texmap_refractionIOR"
 
-	r.refractionAbsorptionDistance = origMtl.refraction_fogMult
-	r.refractionAbsorptionColor = origMtl.refraction_fogColor
-	r.refractionAbsorptionColorTexmap = origMtl.texmap_refraction_fog
+	copy_property r origMtl "refractionAbsorptionDistance" "refraction_fogMult"
+	copy_property r origMtl "refractionAbsorptionColor" "refraction_fogColor"
+	copy_property r origMtl "refractionAbsorptionColorTexmap" "texmap_refraction_fog"
 
 	-- emission
-	if origMtl.selfIllumination.red > 0 or origMtl.selfIllumination.green > 0 or origMtl.selfIllumination.blue > 0 do ( r.emissiveEnable = true )
-	r.emissiveColor = origMtl.selfIllumination
-	r.emissiveColorTexmap = origMtl.texmap_self_illumination
-	r.emissiveIntensity = origMtl.selfIllumination_multiplier
-	r.emissiveWeight = 0.65
+	defaultEnable r "emissiveEnable" origMtl "selfIllumination" "texmap_self_illumination"
+	copy_property r origMtl "emissiveColor" "selfIllumination"
+	copy_property r origMtl "emissiveColorTexmap" "texmap_self_illumination"
+	copy_property r origMtl "emissiveIntensity" "selfIllumination_multiplier"
+	set_property r "emissiveWeight" 0.65
 
-	if origMtl.texmap_opacity != undefined do (
-		r.TransparencyEnable = true
-		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.texmap_opacity
-		r.transparencyTexmap = arith
+	if get_property origMtl "texmap_opacity" != undefined do (
+		set_property r "TransparencyEnable" true
+		invertMap r origMtl "transparencyTexmap" "texmap_opacity"
+	)
+	
+	if get_property origMtl "texmap_bump_on" do (
+		set_property r "normalEnable" true
+		copy_property r origMtl "normalTexmap" "texmap_bump"
 	)
 
-	if origMtl.texmap_bump_on do (
-		r.normalEnable = true
-		r.normalTexmap = origMtl.texmap_bump
+	if get_property origMtl "texmap_displacement_on" do (
+		set_property r "displacementEnable" true
+		copy_property r origMtl "displacementTexmap" "texmap_displacement"
+		set_property r "displacementMin" 0
+		set_property r "displacementMax" (get_property origMtl "texmap_displacement_multiplier" / 10.0)
+		set_property r "displacementSubdiv" 5
 	)
 
-	if origMtl.texmap_displacement_on do (
-		r.displacementEnable = true
-		r.displacementTexmap = origMtl.texmap_displacement
-		r.displacementMin = 0
-		r.displacementMax = origMtl.texmap_displacement_multiplier / 10.0
-		r.displacementSubdiv = 5
-	)
+	-- logging
+	end_log origMtl
 
 	r
 )
@@ -216,240 +371,240 @@ fn convertVrayCarPaintMtl origMtl =(
 	r = RPR_Uber_Material()
 	r.name = origMtl.name + rprPostfixStr
 
-	r.diffuseColor = origMtl.base_color
-	r.diffuseColorTexmap = origMtl.texmap_base_color
+	-- log to file 
+	start_log origMtl r
+
+	copy_property r origMtl "diffuseColor" "base_color"
+	copy_property r origMtl "diffuseColorTexmap" "texmap_base_color"
 	
-	r.reflectionEnable = true
-	r.ReflectionWeight = origMtl.base_reflection
-	r.ReflectionWeightTexmap = origMtl.texmap_base_reflection
-	r.reflectionRoughness = 1 - origMtl.base_glossiness
-	if origMtl.texmap_base_glossiness != undefined do (
-		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.texmap_base_glossiness
-		r.reflectionRoughnessTexmap = arith
-	)
+	set_property r "reflectionEnable" true
+	copy_property r origMtl "ReflectionWeight" "base_reflection"
+	copy_property r origMtl "ReflectionWeightTexmap" "texmap_base_reflection"
+	set_property r "reflectionRoughness" (1 - get_property origMtl "base_glossiness")
+	invertMap r origMtl "reflectionRoughnessTexmap" "texmap_base_glossiness"
+	
+	set_property r "CoatingEnable" true
+	copy_property r origMtl "CoatingColor" "coat_color"
+	copy_property r origMtl "CoatingColorTexmap" "texmap_coat_color"
+	set_property r "CoatingWeight" 1
+	copy_property r origMtl "CoatingWeightTexmap" "texmap_coat_strength"
+	set_property r "CoatingRoughness" (1 - get_property origMtl "coat_glossiness")
+	invertMap r origMtl "CoatingRoughnessTexmap" "texmap_coat_glossiness"
 
-	/*
-	if origMtl.base_trace_reflections do (
-		r.reflectionColor = origMtl.base_color
-		r.reflectionColorTexmap = origMtl.texmap_base_color
-		r.reflectionMode = 2
-		r.reflectionMetalness = origMtl.base_reflection
-		r.reflectionMetalnessTexmap = origMtl.texmap_base_reflection
-	)
-	*/
-
-	r.CoatingEnable = true
-	r.CoatingColor = origMtl.coat_color
-	r.CoatingColorTexmap = origMtl.texmap_coat_color
-	r.CoatingWeight = 1
-	r.CoatingWeightTexmap = origMtl.texmap_coat_strength
-	r.CoatingRoughness = 1 - origMtl.coat_glossiness
-	if origMtl.texmap_coat_glossiness != undefined do (
-		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.texmap_coat_glossiness
-		r.CoatingRoughnessTexmap = arith
-	)
-
-	--r.refractionAbsorptionColor = origMtl.base_color
+	-- logging
+	end_log origMtl
 
 	r
 )
 
 fn convertVrayOverrideMtl origMtl =(
 
-	if origMtl.baseMtl == undefined do (
-		r = RPR_Uber_Material()
-		return r
-	)
+	local baseMtl = get_property origMtl "baseMtl"
+	if baseMtl == undefined do return RPR_Uber_Material()
 
 	materials = #()
-	if origMtl.giMtl != undefined do(
-		append materials origMtl.giMtl
-	)
-	if origMtl.reflectMtl != undefined do(
-		append materials origMtl.reflectMtl
-	)
-	if origMtl.refractMtl != undefined do(
-		append materials origMtl.refractMtl
-	)
+	if get_property origMtl "giMtl" != undefined do append materials (get_property origMtl "giMtl")
+	if get_property origMtl "reflectMtl" != undefined do append materials (get_property origMtl "reflectMtl")
+	if get_property origMtl "refractMtl" != undefined do append materials (get_property origMtl "refractMtl")
 
-	if materials.count == 0 do(
-		return origMtl.baseMtl
-	)
+	local rpr_material = convertMaterial baseMtl
 
-	r = RPR_Blend_Material()
+	if materials.count == 0 do return rpr_material
+
+	local r = RPR_Blend_Material() 
 	r.name = origMtl.name + rprPostfixStr
 
-	r.material1 = origMtl.baseMtl
-	r.weight = 0.5
+	-- log to file 
+	start_log origMtl r
+
+	set_property r "material1" rpr_material
+	set_property r "weight" 0.5
 
 	-- materials conversion
 	first_material = true
 	for i in materials do (
 		if first_material then (
-			r.material2 = i
+			set_property r "material2" (convertMaterial i)
 			first_material = false
 		) else (
 			old_r = r
 			r = RPR_Blend_Material()
-			r.material1 = old_r
-			r.material2 = i
-			r.weight = 0.5
+			set_property r "material1" old_r
+			set_property r "material2" (convertMaterial i)
+			set_property r "weight" 0.5
 		)
 	)
+
+	-- logging
+	end_log origMtl
 
 	r
 )
 
 fn convertVrayBlendMtl origMtl =(
-	r = RPR_Blend_Material()
+	local r = RPR_Blend_Material()
 	r.name = origMtl.name + rprPostfixStr
 
-	r.material1 = origMtl.baseMtl
+	-- log to file 
+	start_log origMtl r
+
+	baseMtl = get_property origMtl "baseMtl"
+	set_property r "material1" (convertMaterial baseMtl)
 
 	-- materials count
 	materials_count = 0
-	for i=1 to origMtl.coatMtl.count do (
-		if origMtl.coatMtl[i] != undefined do (
+	coatMtl = get_property origMtl "coatMtl"
+	texmap_blend = get_property origMtl "texmap_blend"
+	for i=1 to coatMtl.count do (
+		if coatMtl[i] != undefined do (
 			materials_count += 1
 		)
 	)
 
 	-- materials conversion
 	first_material = true
-	for i=1 to origMtl.coatMtl.count do (
-		if origMtl.coatMtl[i] != undefined do (
+	for i=1 to coatMtl.count do (
+		if coatMtl[i] != undefined do (
 			if materials_count > 1 then (
 				if first_material then (
-					r.material2 = origMtl.coatMtl[i]
-					r.weightMap = origMtl.texmap_blend[i]
+					set_property r "material2" (convertMaterial coatMtl[i])
+					set_property r "weightMap" (convertMaterial texmap_blend[i])
 					first_material = false
 				) else (
 					old_r = r
 					r = RPR_Blend_Material()
-					r.material1 = old_r
-					r.material2 = origMtl.coatMtl[i]
-					r.weightMap = origMtl.texmap_blend[i]
+					set_property r "material1" old_r
+					set_property r "material2" (convertMaterial coatMtl[i])
+					set_property r "weightMap" (convertMaterial texmap_blend[i])
 				)
 			) else (
-				r.material2 = origMtl.coatMtl[i]
-				r.weightMap = origMtl.texmap_blend[i]
+				set_property r "material2" (convertMaterial coatMtl[i])
+				set_property r "weightMap" (convertMaterial texmap_blend[i])
 			)
 		)
 	)
-	--r.weight = origMtl.texmap_blend_multiplier[1]
 	
+	-- logging
+	end_log origMtl
+
 	r
 )
 
 fn convertVrayBumpMtl origMtl =(
-	r = "no_replace"
 	
-	base_material = origMtl.base_mtl
+	local base_material = get_property origMtl "base_mtl"
+	local rpr_material = convertMaterial base_material
 
-	if classof base_material == RPR_Uber_Material do (
+	-- log to file 
+	start_log origMtl rpr_material
+
+	if classof rpr_material == RPR_Uber_Material do (
 		rpr_normal_map = RPR_Normal()
-		rpr_normal_map.map = origMtl.bump_map
-		rpr_normal_map.strength = origMtl.bump_amount
-		rpr_normal_map.isBump = true
+		set_property rpr_normal_map "isBump" true
+		copy_property rpr_normal_map origMtl "map" "bump_map"
+		copy_property rpr_normal_map origMtl "strength" "bump_amount"
 
-		base_material.normalEnable = true
-		base_material.normalTexmap = rpr_normal_map
-		
-		replaceInstances origMtl base_material
+		set_property rpr_material "normalEnable" true
+		set_property rpr_material "normalTexmap" rpr_normal_map
 	)
 
-	r
+	-- logging
+	end_log origMtl
+
+	rpr_material
 )
 
 fn convertVray2SidedMtl origMtl =(
-	r = "no_replace"
-	
-	if origMtl.frontMtl != undefined then(
-		base_material = origMtl.frontMtl
-	) else if origMtl.backMtl != undefined then(
-		base_material = origMtl.backMtl
+
+	if get_property origMtl "frontMtl" != undefined then (
+		local base_material = get_property origMtl "frontMtl"
+	) else if get_property origMtl "backMtl" != undefined then(
+		local base_material = get_property origMtl "backMtl"
 	)
 
-	if classof base_material == RPR_Uber_Material do (
-		base_material.diffuseBackscatteringWeight = 1
-		base_material.diffuseSeparateBackScatteringColor = true
-		base_material.diffuseBackScatteringColor = origMtl.translucency
-		base_material.diffuseBackScatteringColorTexmap = origMtl.texmap_translucency
-		
-		replaceInstances origMtl base_material
+	local rpr_material = convertMaterial base_material
+
+	-- log to file 
+	start_log origMtl rpr_material
+
+	if classof rpr_material == RPR_Uber_Material do (
+		set_property rpr_material "diffuseBackscatteringWeight" 1
+		set_property rpr_material "diffuseSeparateBackScatteringColor" true
+		copy_property rpr_material origMtl "diffuseBackScatteringColor" "translucency"
+		copy_property rpr_material origMtl "diffuseBackScatteringColorTexmap" "texmap_translucency"
 	)
 
-	r
+	-- logging
+	end_log origMtl
+
+	rpr_material
 )
 
 fn convertVrayFastSSS2 origMtl =(
-	r = RPR_Uber_Material()
+	local r = RPR_Uber_Material()
 	r.name = origMtl.name + rprPostfixStr
 
+	-- log to file 
+	start_log origMtl r
+
 	-- diffuse
-	r.diffuseColor = origMtl.diffuse_color
-	r.diffuseColorTexmap = origMtl.texmap_diffuse_color
-	r.diffuseWeight = 1
-	r.diffuseWeightTexmap = origMtl.texmap_diffuse_amount
-
-	r.sssEnable = true
-	r.sssColor = origMtl.sub_surface_color
-	r.sssColorTexmap = origMtl.texmap_sss_color
-	r.diffuseSeparateBackScatteringColor = true
-	r.diffuseBackscatteringWeight = 0.25
-	r.diffuseBackScatteringColor = origMtl.scatter_color
-	r.diffuseBackScatteringColorTexmap = origMtl.texmap_scatter_color
-	r.sssRadius = point3 origMtl.scatter_radius origMtl.scatter_radius origMtl.scatter_radius
-	r.sssRadiusTexmap = origMtl.texmap_scatter_radius
-
-	if origMtl.specular_color.red > 0 or origMtl.specular_color.green > 0 or origMtl.specular_color.blue > 0 do ( r.reflectionEnable = true )
-	r.reflectionColor = origMtl.specular_color
-	r.reflectionColorTexmap = origMtl.texmap_specular_color
+	copy_property r origMtl "diffuseColor" "diffuse_color"
+	copy_property r origMtl "diffuseColorTexmap" "texmap_diffuse_color"
+	set_property r "diffuseWeight" 1
+	copy_property r origMtl "diffuseWeightTexmap" "texmap_diffuse_amount"
 	
-	r.reflectionRoughness = 1 - origMtl.specular_glossiness
-	if origMtl.texmap_specular_color != undefined do (
-		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.texmap_specular_color
-		r.reflectionRoughnessTexmap = arith
+	set_property r "sssEnable" true
+	copy_property r origMtl "sssColor" "sub_surface_color"
+	copy_property r origMtl "sssColorTexmap" "texmap_sss_color"
+	set_property r "diffuseSeparateBackScatteringColor" true
+	set_property r "diffuseBackscatteringWeight" 0.25
+	copy_property r origMtl "diffuseBackScatteringColor" "scatter_color"
+	copy_property r origMtl "diffuseBackScatteringColorTexmap" "texmap_scatter_color"
+	scatter_radius = get_property origMtl "scatter_radius"
+	set_property r "sssRadius" (point3 scatter_radius scatter_radius scatter_radius)
+	copy_property r origMtl "sssRadiusTexmap" "texmap_scatter_radius"
+
+	defaultEnable r "reflectionEnable" origMtl "specular_color" "texmap_specular_color"
+	copy_property r origMtl "reflectionColor" "specular_color"
+	copy_property r origMtl "reflectionColorTexmap" "texmap_specular_color"
+
+	set_property r "reflectionRoughness" (1 - get_property origMtl "specular_glossiness")
+	invertMap r origMtl "reflectionRoughnessTexmap" "texmap_specular_color"
+	
+	if get_property origMtl "texmap_opacity" != undefined do (
+		set_property r "TransparencyEnable" true
+		invertMap r origMtl "transparencyTexmap" "texmap_opacity"
+	)
+	
+	if get_property origMtl "texmap_bump_on" do (
+		set_property r "normalEnable" true
+		copy_property r origMtl "normalTexmap" "texmap_bump"
 	)
 
-	if origMtl.texmap_opacity != undefined do (
-		r.TransparencyEnable = true
-		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.texmap_opacity
-		r.transparencyTexmap = arith
-	)
-
-	if origMtl.texmap_bump_on do (
-		r.normalEnable = true
-		r.normalTexmap = origMtl.texmap_bump
-	)
+	-- logging
+	end_log origMtl
 
 	r
 )
 
 fn convertVrayMtlWrapper origMtl =(
-	r = RPR_Shadow_Catcher_Material()
+	local r = RPR_Shadow_Catcher_Material()
 	r.name = origMtl.name + rprPostfixStr
 
-	r.shadowAlphaMul = 0.2
-	if not origMtl.matteSurface do(
-		r.BackgroundIsEnvironment = false
-		if classof origMtl.baseMtl == RPR_Uber_Material do(
-			r.shadowColor = origMtl.baseMtl.diffuseColor
-			r.shadowColorTexmap = origMtl.baseMtl.diffuseColorTexmap
+	-- log to file 
+	start_log origMtl r
+
+	set_property r "shadowAlphaMul" 0.2
+	if not get_property origMtl "matteSurface" do (
+		set_property r "BackgroundIsEnvironment" false
+		if classof get_property origMtl "baseMtl" == RPR_Uber_Material do (
+			copy_property r origMtl.baseMtl "shadowColor" "diffuseColor"
+			copy_property r origMtl.baseMtl "shadowColorTexmap" "diffuseColorTexmap"
 		)
 	)
+
+	-- logging
+	end_log origMtl
 
 	r
 )
@@ -569,101 +724,395 @@ fn convertVrayPluginNodeMtl origMtl =(
 )
 
 fn convertVrayLightMtl origMtl =(
-	r = RPR_Uber_Material()
+	local r = RPR_Uber_Material()
 	r.name = origMtl.name + rprPostfixStr
 
-	-- emission
-	r.emissiveEnable = true
-	r.emissiveColor = origMtl.color
-	r.emissiveColorTexmap = origMtl.texmap
-	r.emissiveIntensity = origMtl.multiplier
+	-- log to file 
+	start_log origMtl r
 
-	if origMtl.opacity_texmap != undefined do (
-		r.TransparencyEnable = true
+	-- emission
+	set_property r "emissiveEnable" true
+	copy_property r origMtl "emissiveColor" "color"
+	copy_property r origMtl "emissiveColorTexmap" "texmap"
+	copy_property r origMtl "emissiveIntensity" "multiplier"
+
+	if get_property origMtl "opacity_texmap" != undefined do (
+		set_property r "TransparencyEnable" true
 		arith = RPR_Arithmetic()
-		arith.operator = 1
-		arith.Color1 = color 255 255 255
-		arith.color1texmap = origMtl.opacity_texmap
-		r.TransparencyTexmap = arith
+		set_property arith "operator" 1
+		set_property arith "Color1" (color 255 255 255)
+		copy_property arith origMtl "color1texmap" "opacity_texmap"
+		set_property r "TransparencyTexmap" arith
 	)
 
 	-- displacement
-	if origMtl.displacement_texmap != undefined do ( r.displacementEnable = true )
-	r.displacementTexmap = origMtl.displacement_texmap
-	r.displacementMax = origMtl.displacement_multiplier
-	if origMtl.directLight_subdivs > 8 then ( r.displacementSubdiv = 8 ) else ( r.displacementSubdiv = origMtl.directLight_subdivs )
+	if get_property origMtl "displacement_texmap" != undefined do (set_property r "displacementEnable" true)
+	copy_property r origMtl "displacementTexmap" "displacement_texmap"
+	copy_property r origMtl "displacementMax" "displacement_multiplier"
+	if get_property origMtl "directLight_subdivs" > 8 then (
+		set_property r "displacementSubdiv" 8
+	) else (
+		copy_property r origMtl "displacementSubdiv" "directLight_subdivs" 
+	)
+	
+	-- logging
+	end_log origMtl
+
+	r
+)
+
+
+/* 
+    UTILITIES
+*/
+
+fn convertUnsupportedUtility origMtl =(
+	local r = RPR_Arithmetic()
+	r.name = origMtl.name + unsupportedPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	end_log origMap
+
+	r
+)
+
+fn convertVrayCompTex origMap = (
+	local r = RPR_Arithmetic()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	
+	copy_property r origMap "color0texmap" "sourceA"
+	copy_property r origMap "color1texmap" "sourceB"
+	copy_property r origMap "operator" "operator"
+
+	local rpr_operator = case get_property origMap "operator" of (
+		0: 0
+		1: 1
+		3: 2
+		4: 3
+		5: 12
+		6: 13
+		default: 0
+	)
+	set_property r "operator" rpr_operator
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertVrayBump2Normal origMap = (
+	local r = RPR_Normal()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	
+	set_property r "isBump" true
+	copy_property r origMap "map" "bump_map"
+	copy_property r origMap "strength" "bump_map_mult"
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertVrayNormalMap origMap = (
+	local r = RPR_Normal()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	
+	if get_property origMap "normal_map_on" then (
+		set_property r "isBump" false
+		copy_property r origMap "map" "normal_map"
+		set_property r "strength" (get_property origMap "normal_map_multiplier" / 100.0)
+	) else (
+		set_property r "isBump" true
+		copy_property r origMap "map" "bump_map"
+		set_property r "strength" (get_property origMap "bump_map_mult" / 100.0)
+	)
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertVrayDirt origMap = (
+	if origMap.mode == 0 then (
+		local r = RPR_Ambient_Occlusion()
+		r.name = origMap.name + rprPostfixStr
+		
+		-- log to file 
+		start_log origMap r
+
+		copy_property r origMap "unoccluded_Color" "unoccluded_color"
+		copy_property r origMap "occluded_Color" "occluded_color"
+		copy_property r origMap "color0Texmap" "texmap_unoccluded_color"
+		copy_property r origMap "color1Texmap" "texmap_occluded_color"
+		copy_property r origMap "radius" "radius"
+
+		-- logging
+		end_log origMap
+
+		r
+	) else (
+		local r = convertUnsupportedUtility origMap
+		r
+	)	
+)
+
+fn convertVrayColor origMap = (
+	local r = RPR_Color_Value()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	
+	copy_property r origMap "color" "color"
+
+	-- logging
+	end_log origMap
 	
 	r
 )
 
-fn convertVrayIES origLight = (
-	r = ies_light()
-	origLight.name += rprPostfixStr
-	
-	-- On/Off, Include/exclude
-	r.enabled = origLight.enabled
-	r.targeted = origLight.targeted
+fn convertVrayCurvature origMap = (
+	local r = RPR_Ambient_Occlusion()
+	r.name = origMap.name + rprPostfixStr
 
-	/*
-	r.pos = origLight.pos
-	r.scale = origLight.scale
-	r.rotation = [origLight.rotationX, origLight.rotationY, origLight.rotationZ]
-	*/
+	-- log to file 
+	start_log origMap r
+	
+	set_property r "side" 1
+	min_color = remap_value (get_property origMap "out_color_min") 1 0 255 0
+	set_property r "unoccluded_Color" (color min_color min_color min_color)
+	max_color = remap_value (get_property origMap "out_color_max") 1 0 255 0
+	set_property r "occluded_Color" (color max_color max_color max_color)
+	set_property r "radius" (0.04 + get_property origMap "sample_spread" / 21)
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertVrayHDRI origMap = (
+	local r = BitmapTexture()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	
+	-- filename, output
+	if get_property origMap "HDRIMapName" != "" and get_property origMap "HDRIMapName" != undefined do (
+		copy_property r origMap "fileName" "HDRIMapName"
+	)
+	
+	copy_property r origMap "output" "Output"
+	if hasproperty origMap #coords then(
+		copy_property r origMap "coords" "coords"
+	)
+	
+	-- Gamma handling
+	if get_property origMap "gamma" != 1 do (
+		set_property r "bitmap" (openBitmap r.bitmap.filename gamma:(1.0 / get_property origMap "gamma"))
+	)
+	
+	if get_property origMap "mapType" == 2 then(   -- spherical mode
+		set_property r.coords "mapping" 0 -- spherical
+		set_property r.coords "mappingType" 1 -- Environ
+		set_property r.coords "U_Offset" (0.25 + get_property origMap "horizontalRotation" / 360.0)
+		set_property r.coords "V_Offset" (get_property origMap "verticalRotation" / 180.0)
+
+		if get_property origMap "horizontalFlip" then(
+			set_property r.coords "U_Offset" (0.25 - get_property origMap "horizontalRotation" / 360.0)
+			set_property r.coords "U_Tiling" (-get_property origMap.coords "U_Tiling")
+		)
+		if get_property origMap "verticalFlip" then set_property r.coords "V_Tiling" (-get_property origMap.coords "V_Tiling")
+	)
+	
+	-- alpha source, mono channel out, rgb channel out
+	copy_property r origMap "alphaSource" "alphaSource"
+	copy_property r origMap "monoOutput" "monoOutput"
+	set_property r "rgbOutput" (if get_property origMap "rgbOutput" > 1 then 0 else get_property origMap "rgbOutput")
+	
+	-- crop/place
+	copy_property r origMap "apply" "cropplace_on"
+	copy_property r origMap "cropPlace" "cropplace_mode"
+	copy_property r origMap "clipu" "cropplace_u"
+	copy_property r origMap "clipv" "cropplace_v"
+	copy_property r origMap "clipw" "cropplace_width"
+	copy_property r origMap "cliph" "cropplace_height"
+	
+	set_property r.output "output_amount" (get_property r.output "output_amount" * get_property origMap "multiplier" * get_property origMap "renderMultiplier")
+
+	-- logging
+	end_log origMap
+	
+	r
+)
+
+fn convertColorOSL origMap operator = (
+	local r = RPR_Arithmetic()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+
+	set_property r "operator" operator
+	copy_property arith origMap "Color1" "A"
+	copy_property arith origMap "Color2" "B"
+	copy_property arith origMap "color0texmap" "A_map"
+	copy_property arith origMap "color1texmap" "B_map"
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertColorClampOSL origMap = (
+	local r = RPR_Arithmetic()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+
+	set_property r "operator" 12
+
+	arith = RPR_Arithmetic()
+	set_property arith "operator" 13
+	copy_property arith origMap "Color1" "Input"
+	copy_property arith origMap "Color2" "min"
+	copy_property arith origMap "color0texmap" "Input_map"
+	copy_property arith origMap "color1texmap" "Min_map"
+
+	set_property r "color0texmap" arith
+	copy_property r origMap "Color2" "max"
+	copy_property r origMap "color1texmap" "Max_map"
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertOSLMap origMap = (
+
+	OSLPath = get_property origMap "OSLPath"
+	OSLFile = (filterString OSLPath "\\")
+	OSLFile = OSLFile[OSLFile.count]
+	local new_osl = case OSLFile of (
+		"ColorAdd.osl": convertColorOSL origMap 0
+		"ColorSub.osl": convertColorOSL origMap 1
+		"ColorMul.osl": convertColorOSL origMap 2
+		"ColorDiv.osl": convertColorOSL origMap 3
+		"ColorMin.osl": convertColorOSL origMap 12
+		"ColorMax.osl": convertColorOSL origMap 13
+		"ColorClamp.osl": convertColorClampOSL origMap
+
+		default: origMap
+	)
+
+	new_osl
+)
+
+
+/* 
+    LIGHTS
+*/
+
+fn convertVrayIES origLight = (
+	local r = ies_light()
+	r.name = origLight.name + rprPostfixStr
+	
+	-- log to file 
+	start_log origLight r
+
+	-- On/Off, Include/exclude
+	copy_property r origLight "enabled" "enabled"
+	copy_property r origLight "targeted" "targeted"
+
+	-- position conversion
+	set_property origLight "targeted" false
+	copy_property r origLight "pos" "pos"
+	copy_property r origLight "rotation" "rotation"
+	copy_property r origLight "scale" "scale"
+	copy_property r origLight "pivot" "pivot"
+	copy_property r origLight "transform" "transform"
+	copy_property r origLight "dir" "dir"
+
+	-- rotate rpr ies to match vray ies
+	rotate r (eulerangles -90 0 0)
 	
 	-- ies file
-	if origLight.ies_file != "" and origLight.ies_file != undefined do (
+	if get_property origLight "ies_file" != "" and get_property origLight "ies_file" != undefined do (
 		plugcfg = GetDir #plugcfg
 		profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
 		makeDir (profile_path)
-		ies_file = origLight.ies_file
+		ies_file = get_property origLight "ies_file"
 		ies_name = (filterString ies_file "\\")
 		ies_name = ies_name[ies_name.count]
 		copyFile (ies_file) (profile_path + ies_name)
-		r.profile = ies_name
+		set_property r "profile" ies_name
 	)
 
-	-- location
-	r.rotationX = origLight.rotation_X + 90.0
-	r.rotationY = origLight.rotation_Y - 90.0
-	r.rotationZ = origLight.rotation_Z
+	-- rotation XYZ
+	copy_property r origLight "rotationX" "rotation_X"
+	copy_property r origLight "rotationY" "rotation_Y"
+	copy_property r origLight "rotationZ" "rotation_Z"
 
 	-- Intensitiy, Color, Texmap
-	if origLight.intensity_type == 0 then (
-		intensity = origLight.intensity_value
+	if get_property origLight "intensity_type" == 0 then (
+		intensity = get_property origLight "intensity_value"
 	) else (
-		intensity = origLight.intensity_value / 1.398
+		intensity = get_property origLight "intensity_value" / 1.398
 	)
 
-	r.intensity = intensity / 999
-	r.colorMode = origLight.color_mode
-	r.color = origLight.color
-	r.temperature = origLight.color_temperature
+	set_property r "intensity" (intensity / 999)
+	copy_property r origLight "colorMode" "color_mode"
+	copy_property r origLight "color" "color"
+	copy_property r origLight "temperature" "color_temperature"
+
+	-- logging
+	end_log origLight
 
 	r
 )
 
 fn convertVrayLight origLight = (
-	if origLight.skylightPortal then ( 
-		delete origLight
-		return "no_replace"
-	)
+	if origLight.skylightPortal then return "no_replace"
 
 	light_type = origLight.type
 	if light_type != 1 then (
-		r = physical_light()
-		origLight.name += rprPostfixStr
+		local r = physical_light()
+		r.name = origLight.name + rprPostfixStr
 
-		-- user points
-		
-		r.LightPoint = [1, 1, 1]
-		r.SecondPoint = [1, 1, 1]
-		r.ThirdPoint = [0, 0, 0]
-		
+		-- log to file 
+		start_log origLight r
 
 		-- OnOff, Include/exclude
-		r.enabled = origLight.on 
-		if origLight.invisible then ( r.isVisible = false ) else ( r.isVisible = true ) -- visible
-		r.lightType = 0 -- area light
+		copy_property r origLight "enabled" "on"
+		if get_property origLight "invisible" then (set_property r "isVisible" false) else (set_property r "isVisible" true) -- visible
+		
+		-- position conversion
+		set_property origLight "targeted" false
+		copy_property r origLight "pos" "pos"
+		copy_property r origLight "rotation" "rotation"
+		copy_property r origLight "scale" "scale"
+		copy_property r origLight "pivot" "pivot"
+		copy_property r origLight "transform" "transform"
+		copy_property r origLight "dir" "dir"
+
+		set_property r "lightType" 0 -- area light
 
 		local areaShape = case light_type of (
 			0: 3 -- Plane
@@ -672,116 +1121,241 @@ fn convertVrayLight origLight = (
 			4: 0 -- Disc
 			default: 1
 		)
-		r.areaShape = areaShape
+		set_property r "areaShape" areaShape
 
-		physicalCamera = getclassinstances VrayPhysicalCamera
-		if physicalCamera.count < 1 do (
-			if origLight.normalizeColor == 0 do ( -- image
-				r.UnitsType = 0
-				r.LightIntensity = origLight.multiplier * 2.5
-			) 
-			if origLight.normalizeColor == 1 do ( -- luminous
-				r.UnitsType = 0
-				r.LightIntensity = origLight.multiplier / 10000000
-			)
-			if origLight.normalizeColor == 2 do ( -- luminance
-				r.UnitsType = 0
-				r.LightIntensity = origLight.multiplier / 10000
-			)
-			if origLight.normalizeColor == 3 do ( -- radiant power
-				r.UnitsType = 1
-				r.LightIntensity = origLight.multiplier
-				r.LuminousEfficacy = 250
-			)
-			if origLight.normalizeColor == 4 do ( -- radiance
-				r.UnitsType = 2
-				r.LightIntensity = origLight.multiplier / 2
-			)
-
+		normalize_color = get_property origLight "normalizeColor"
+		if normalize_color == 0 do ( -- image
+			set_property r "UnitsType" 0
+			set_property r "LightIntensity" (get_property origLight "multiplier" * 2.5)
+		) 
+		if normalize_color == 1 do ( -- luminous
+			set_property r "UnitsType" 0
+			set_property r "LightIntensity" (get_property origLight "multiplier" / 10000000)
+		)
+		if normalize_color == 2 do ( -- luminance
+			set_property r "UnitsType" 0
+			set_property r "LightIntensity" (get_property origLight "multiplier" / 10000)
+		)
+		if normalize_color == 3 do ( -- radiant power
+			set_property r "UnitsType" 1
+			copy_property r origLight "LightIntensity" "multiplier"
+			set_property r "LuminousEfficacy" 250
+		)
+		if normalize_color == 4 do ( -- radiance
+			set_property r "UnitsType" 2
+			set_property r "LightIntensity" (get_property origLight "multiplier" / 2)
 		)
 
-		r.colourMode = origLight.color_mode
-		r.colourPicker = origLight.color
-		r.temperature = origLight.color_temperature
+		copy_property r origLight "colourMode" "color_mode"
+		copy_property r origLight "colourPicker" "color"
+		copy_property r origLight "temperature" "color_temperature"
 
 		if areaShape == 2 or areaShape == 0 do (
-			r.areaWidths = origLight.sizeLength
+			copy_property r origLight "areaWidths" "sizeLength"
 		)
 		if areaShape == 3 do (
-			r.areaWidths = origLight.sizeWidth
-			r.areaLength = origLight.sizeLength
+			copy_property r origLight "areaWidths" "sizeWidth"
+			copy_property r origLight "areaLength" "sizeLength"
 		)
 		
-		if origLight.texmap != undefined and origLight.texmap_on == true do (
-			r.EnableMap = true
-			r.ColourMap = origLight.texmap
+		if get_property origLight "texmap" != undefined and get_property origLight "texmap_on" do (
+			set_property r "EnableMap" true
+			copy_property r origLight "ColourMap" "texmap"
 		)
 
+		-- logging
+		end_log origLight
+
 	) else (
-		r = "no_replace"
+		local r = "no_replace"
+
 		if origLight.on do (
 			rpr = Radeon_ProRender()
-			rpr.backgroundOverride = true
-			rpr.backgroundType = 0
-			if origLight.texmap != undefined and origLight.texmap_on == true do (
-				rpr.useBackgroundMap = True
-	    		rpr.backgroundMap =  origLight.texmap
+
+			-- log to file 
+			start_log origLight rpr
+
+			set_property rpr "backgroundOverride" true
+			set_property rpr "backgroundType" 0
+			if get_property origLight "texmap" != undefined and get_property origLight "texmap_on" do (
+				set_property rpr "useBackgroundMap" true
+				copy_property rpr origLight "backgroundMap" "texmap"
 			)
-	    	rpr.backgroundIntensity = origLight.multiplier
-	    	rpr.backgroundColor = origLight.color
-	    )
+			copy_property rpr origLight "backgroundIntensity" "multiplier"
+			copy_property rpr origLight "backgroundColor" "color"
 
-	    -- rotate IBL
-		clearSelection()
-		select $RPREnv001
-		$.rotation = quat 0 0 0.707107 0.707107
-		clearSelection()
+		    -- rotate IBL
+			clearSelection()
+			select $RPREnv001
+			$.rotation = quat 0 0 0.707107 0.707107
+			clearSelection()
 
-	    delete origLight
+			-- logging
+			end_log origLight
+		)
+
 	)
 	
 	r
 )
 
 fn convertVraySun origLight = (
-	r = "no_replace"
-	
+
 	if origLight.enabled do (
 		rpr = Radeon_ProRender()
-		rpr.backgroundOverride = true
-		rpr.backgroundType = 1
-		rpr.backgroundSkyType = 0
-		rpr.backgroundSkyHaze = origLight.turbidity
-		rpr.backgroundSkyFilterColor = origLight.filter_color
-		rpr.backgroundSkySunDisc = origLight.size_multiplier
-		rpr.backgroundSkyGroundAlbedo = origLight.ground_albedo
-		rpr.backgroundSkyIntensity = origLight.intensity_multiplier * 20
 
+		-- log to file 
+		start_log origLight rpr
+
+		set_property rpr "backgroundOverride" true
+		set_property rpr "backgroundType" 1
+		set_property rpr "backgroundSkyType" 0
+		copy_property rpr origLight "backgroundSkyHaze" "turbidity"
+		copy_property rpr origLight "backgroundSkyFilterColor" "filter_color"
+		copy_property rpr origLight "backgroundSkySunDisc" "size_multiplier"
+		copy_property rpr origLight "backgroundSkyGroundAlbedo" "ground_albedo"
+		set_property rpr "backgroundSkyIntensity" (get_property origLight "intensity_multiplier" * 20)
+		
+		-- logging
+		end_log origLight
     )
 
-	-- clean scene
-	delete origLight
-
-    r
+    "no_replace"
 )
 
 fn convertVrayAmbientLight origLight = (
+	"no_replace"
+)
 
-	-- clean scene
-	delete origLight
 
-	r = "no_replace"
+/* 
+    SHAPES
+*/
+
+fn convertVraySphere origShape = (
+	local r = Sphere()
+	r.name = origShape.name + rprPostfixStr
+
+	-- log to file 
+	start_log origShape r
+
+	copy_property r origShape "pos" "pos"
+	copy_property r origShape "scale" "scale"
+	copy_property r origShape "rotation" "rotation"
+	copy_property r origShape "radius" "radius"
+
+	clearSelection()
+	select r
+	modPanel.addModToSelection (TurboSmooth ()) ui:on
+	clearSelection()
+
+	-- logging
+	end_log origShape
+
+	r
+	
+)
+
+fn convertVrayPlane origShape = (
+	local r = Plane()
+	r.name = origShape.name + rprPostfixStr
+
+	-- log to file 
+	start_log origShape r
+
+	copy_property r origShape "pos" "pos"
+	copy_property r origShape "scale" "scale"
+	copy_property r origShape "rotation" "rotation"
+
+	set_property r "length" 1000000000.0
+	set_property r "width" 1000000000.0
+
+	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
+	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
+		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
+		set_property shadow_catcher_mat "shadowAlphaMul" 0.2
+		set_property r "material" shadow_catcher_mat
+	)
+
+	-- logging
+	end_log origShape
+
+	r
+	
+)
+
+fn convertPlane origShape = (
+
+	-- log to file 
+	start_log origShape origShape
+
+	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
+	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
+		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
+		set_property shadow_catcher_mat "shadowAlphaMul" 0.2
+		set_property origShape "material" shadow_catcher_mat
+	)
+
+	-- logging
+	end_log origShape
+
+	origShape
+)
+
+/* 
+    CAMERAS
+*/
+
+fn convertVrayPhysicalCamera origCamera =(
+
+	local r = Freecamera()
+	r.name = origCamera.name + rprPostfixStr
+
+	-- log to file 
+	start_log origCamera r
+
+	copy_property r origCamera "targetDistance" "target_distance"
+	copy_property r origCamera "showCone" "show_camera_cone"
+	copy_property r origCamera "fov" "fov"
+	copy_property r origCamera "mpassEffect.useTargetDistance" "use_dof"
+	copy_property r origCamera "clipManually" "clip_on"
+	copy_property r origCamera "nearclip" "clip_near"
+	copy_property r origCamera "farclip" "clip_far"
+	copy_property r origCamera "nearrange" "environment_near"
+	copy_property r origCamera "farrange" "environment_far"
+
+	-- logging
+	end_log origCamera
+
 	r
 )
 
-fn convertLights orig_light =(
-	if ((superclassof orig_light)!=light) then return orig_light  -- check if this is a light; if not, just return the value
+fn convertVrayDomeCamera origCamera =(
+
+	local r = Freecamera()
+	r.name = origCamera.name + unsupportedPostfixStr
+
+	-- log to file 
+	start_log origCamera r
+	end_log origCamera
+
+	r
+)
+
+
+/*
+ CONVERT FUNCTIONS
+*/
+
+
+fn convertLight orig_light =(
+	if superclassof orig_light !=light then return orig_light  -- check if this is a light; if not, just return the value
 	
-	local i=findItem orig_lights orig_light -- check if we have already converted this light
-	if i>0 then return new_lights[i]  --if yes, just return the already converted one	
+	local i = findItem orig_lights orig_light -- check if we have already converted this light
+	if i > 0 then return new_lights[i]  --if yes, just return the already converted one	
 	
 	cls=classof orig_light
-	local new_light=case cls of (
+	local new_light = case cls of (
 		VrayLight: errorCatching convertVrayLight orig_light 
 		VrayIES: errorCatching convertVrayIES orig_light 
 		VraySun: errorCatching convertVraySun orig_light 
@@ -798,41 +1372,16 @@ fn convertLights orig_light =(
 	new_light
 )
 
-fn convertVrayPhysicalCamera origCamera =(
 
-	r = Freecamera()
-	origCamera.name += rprPostfixStr
 
-	r.targetDistance = origCamera.target_distance -- 275
-	r.showCone = origCamera.show_camera_cone -- 0 1 2
-	r.fov = origCamera.fov -- 65 771
-	-- r. = origCamera.film_width 22 246
-	r.mpassEffect.useTargetDistance = origCamera.use_dof
-	r.clipManually = origCamera.clip_on
-	r.nearclip = origCamera.clip_near
-	r.farclip = origCamera.clip_far
-	r.nearrange = origCamera.environment_near
-	r.farrange = origCamera.environment_far
-
-	r
-)
-
-fn convertVrayDomeCamera origCamera =(
-
-	r = Freecamera()
-	origCamera.name += unsupportedPostfixStr
-
-	r
-)
-
-fn convertCameras orig_camera =(
-	if ((superclassof orig_camera)!=camera) then return orig_camera 
+fn convertCamera orig_camera =(
+	if superclassof orig_camera != camera then return orig_camera 
 	
-	local i=findItem orig_cameras orig_camera 
-	if i>0 then return new_cameras[i]  
+	local i = findItem orig_cameras orig_camera 
+	if i > 0 then return new_cameras[i]  
 	
 	cls=classof orig_camera
-	local new_camera=case cls of (
+	local new_camera = case cls of (
 		VrayDomeCamera: errorCatching convertVrayDomeCamera orig_camera 
 		VrayPhysicalCamera: errorCatching convertVrayPhysicalCamera orig_camera 
 
@@ -847,352 +1396,16 @@ fn convertCameras orig_camera =(
 	new_camera
 )
 
-fn convertVrayCompTex origMap = (
-	r = RPR_Arithmetic()
-	r.name = origMap.name + rprPostfixStr
-	
-	r.color0texmap = origMap.sourceA 
-	r.color1texmap = origMap.sourceB 
-	r.operator = origMap.operator
-	
-	local rpr_operator = case origMap.operator of (
-		0: 0
-		1: 1
-		3: 2
-		4: 3
-		5: 12
-		6: 13
-		default: 0
-	)
-	r.operator = rpr_operator
 
-	r
-)
-
-fn convertVrayBump2Normal origMap = (
-	r = RPR_Normal()
-	r.name = origMap.name + rprPostfixStr
-	
-	r.isBump = true
-	r.map = origMap.bump_map 
-	r.strength = origMap.bump_map_mult 
-
-	r
-)
-
-fn convertVrayNormalMap origMap = (
-	r = RPR_Normal()
-	r.name = origMap.name + rprPostfixStr
-	
-	if origMap.normal_map_on and not origMap.bump_map_on do (
-		r.isBump = false
-		r.map = origMap.normal_map
-		r.strength = origMap.normal_map_multiplier / 100.0
-	)
-
-	if not origMap.normal_map_on and origMap.bump_map_on do (
-		r.isBump = true
-		r.map = origMap.bump_map 
-		r.strength = origMap.bump_map_mult / 100.0
-	)
-
-	if origMap.normal_map_on and origMap.bump_map_on do (
-		r.isBump = false
-		r.map = origMap.normal_map
-		r.strength = origMap.normal_map_multiplier / 100.0
-	)
-
-	r
-)
-
-fn convertVrayDirt origMap = (
-	if origMap.mode == 0 then (
-		r = RPR_Ambient_Occlusion()
-		r.name = origMap.name + rprPostfixStr
+fn convertMaterial orig_mtl =(
 		
-		r.unoccluded_Color = origMap.unoccluded_color
-		r.occluded_Color = origMap.occluded_color
-		r.color0Texmap = origMap.texmap_unoccluded_color
-		r.color1Texmap = origMap.texmap_occluded_color
-		r.radius = origMap.radius
-		
-		r
-	) else (
-		origMap
-	)	
-)
-
-fn convertVrayColor origMap = (
-	r = RPR_Color_Value()
-	r.name = origMap.name + rprPostfixStr
+	local i = findItem orig_mtls orig_mtl -- check if we have already converted this material
+	if i > 0 then return new_mtls[i]  --if yes, just return the already converted one	
 	
-	r.color = origMap.color 
-	
-	r
-)
-
-fn convertVrayCurvature origMap = (
-	r = RPR_Ambient_Occlusion()
-	r.name = origMap.name + rprPostfixStr
-	
-	r.side = 1
-	min_color = remap_value origMap.out_color_min 1 0 255 0
-	r.unoccluded_Color = color min_color min_color min_color
-	max_color = remap_value origMap.out_color_max 1 0 255 0
-	r.occluded_Color = color max_color max_color max_color
-	r.radius = 0.04 + origMap.sample_spread / 21
-
-	r
-)
-
-fn convertVrayHDRI origMap = (
-	r = BitmapTexture()
-	r.name = origMap.name + rprPostfixStr
-	
-	-- filename, output
-	if origMap.HDRIMapName != "" and origMap.HDRIMapName != undefined do(
-		r.fileName = origMap.HDRIMapName
-	)
-	
-	r.output = origMap.Output
-	if hasproperty origMap #coords then(
-		r.coords = origMap.coords
-	)
-	
-	-- Gamma handling
-	if origMap.gamma != 1 do(
-		r.bitmap = openBitmap r.bitmap.filename gamma:(1.0/origMap.gamma)
-	)
-	
-	if origMap.mapType == 2 then(   -- spherical mode
-		r.coords.mapping = 0 -- spherical
-		r.coords.mappingType = 1 -- Environ
-		r.coords.U_Offset = 0.25 + origMap.horizontalRotation / 360.0
-		r.coords.V_Offset = origMap.verticalRotation / 180.0
-		
-		if origMap.horizontalFlip then(
-			r.coords.U_Offset = 0.25 - origMap.horizontalRotation / 360.0
-			r.coords.U_Tiling = -r.coords.U_Tiling
-		)
-		if origMap.verticalFlip then r.coords.V_Tiling = -r.coords.V_Tiling
-	)
-	
-	-- alpha source, mono channel out, rgb channel out
-	r.alphaSource = origMap.alphaSource
-	r.monoOutput = origMap.monoOutput
-	r.rgbOutput = if origMap.rgbOutput > 1 then 0 else origMap.rgbOutput
-	
-	-- crop/place
-	r.apply = origMap.cropplace_on
-	r.cropPlace = origMap.cropplace_mode
-	r.clipu = origMap.cropplace_u
-	r.clipv = origMap.cropplace_v
-	r.clipw = origMap.cropplace_width
-	r.cliph = origMap.cropplace_height
-	
-	r.output.output_amount *= origMap.multiplier * origMap.renderMultiplier
-	
-	r
-	
-)
-
-fn convertColorOSL origMap operator = (
-	r = RPR_Arithmetic()
-	r.name = origMap.name + rprPostfixStr
-
-	r.operator = operator
-	r.Color1 = origMap.A
-	r.Color2 = origMap.B
-	r.color0texmap = origMap.A_map
-	r.color1texmap = origMap.B_map
-	r
-)
-
-fn convertColorClampOSL origMap = (
-	r = RPR_Arithmetic()
-	r.name = origMap.name + rprPostfixStr
-
-	r.operator = 12
-
-	arith = RPR_Arithmetic()
-	arith.operator = 13
-	arith.Color1 = origMap.Input
-	arith.Color2 = origMap.min
-	arith.color0texmap = origMap.Input_map
-	arith.color1texmap = origMap.Min_map
-
-	r.color0texmap = arith
-	r.Color2 = origMap.max
-	r.color1texmap = origMap.Max_map
-
-	r
-)
-
-fn convertOSLMap origMap = (
-
-	OSLPath = origMap.OSLPath
-	OSLFile = (filterString OSLPath "\\")
-	OSLFile = OSLFile[OSLFile.count]
-	local new_osl=case OSLFile of (
-		"ColorAdd.osl": convertColorOSL origMap 0
-		"ColorSub.osl": convertColorOSL origMap 1
-		"ColorMul.osl": convertColorOSL origMap 2
-		"ColorDiv.osl": convertColorOSL origMap 3
-		"ColorMin.osl": convertColorOSL origMap 12
-		"ColorMax.osl": convertColorOSL origMap 13
-		"ColorClamp.osl": convertColorClampOSL origMap
-
-		default: origMap
-	)
-
-	new_osl
-	
-)
-
-fn convertVraySphere origShape = (
-	r = Sphere()
-	r.name = origShape.name + rprPostfixStr
-
-	r.pos = origShape.pos
-	r.scale = origShape.scale
-	r.rotation = origShape.rotation
-
-	r.radius = origShape.radius
-	--r.normal_flip = origShape.flip_normals
-
-	clearSelection()
-	select r
-	modPanel.addModToSelection (TurboSmooth ()) ui:on
-	clearSelection()
-
-	r
-	
-)
-
-fn convertVrayPlane origShape = (
-	r = Plane()
-	r.name = origShape.name + rprPostfixStr
-
-	r.pos = origShape.pos
-	r.scale = origShape.scale
-	r.rotation = origShape.rotation
-
-	r.length = 1000000000.0
-	r.width = 1000000000.0
-
-	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
-	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
-		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
-		shadow_catcher_mat.shadowAlphaMul = 0.2
-		r.material = shadow_catcher_mat
-	)
-
-	r
-	
-)
-
-fn convertPlane origShape = (
-	
-	shadow_catcher_exists = getUserProp origShape "VRay_Matte_Enable"
-	if shadow_catcher_exists != undefined and shadow_catcher_exists != false do (
-		shadow_catcher_mat = RPR_Shadow_Catcher_Material()
-		shadow_catcher_mat.shadowAlphaMul = 0.2
-		origShape.material = shadow_catcher_mat
-	)
-
-	r = origShape
-	r
-
-)
-
-fn convertVrayUtilities orig_map =(
-	if ((superclassof orig_map)!=textureMap) then return orig_map  -- check if this is a material; if not, just return the value
-	
-	local i=findItem orig_maps orig_map -- check if we have already converted this map
-	if i>0 then return new_maps[i]  --if yes, just return the already converted one	
-	
-	-- recurse into sub-maps, if any
-	local sub_count=getNumSubTexmaps orig_map
-	if sub_count >= 1 then (
-		for i=1 to sub_count do (
-			subMap = getSubTexmap orig_map i
-			if subMap != undefined do (
-				newMap = convertVrayUtilities subMap
-				setSubTexmap orig_map i newMap
-			)
-		)
-	)
-	
-	cls=classof orig_map
-	
-	local new_map=case cls of (
-		VrayCompTex: errorCatching convertVrayCompTex orig_map
-		VrayColor: errorCatching convertVrayColor orig_map
-		VrayBump2Normal: errorCatching convertVrayBump2Normal orig_map
-		VrayDirt: errorCatching convertVrayDirt orig_map
-		VrayNormalMap: errorCatching convertVrayNormalMap orig_map
-		VrayHDRI: errorCatching convertVrayHDRI orig_map
-		VrayCurvature: errorCatching convertVrayCurvature orig_map
-		OSLMap: errorCatching convertOSLMap orig_map
-
-		VrayColor2Bump: errorCatching convertUnsupportedUtility orig_map
-		VrayDistanceTex: errorCatching convertUnsupportedUtility orig_map
-		VrayEdgesTex: errorCatching convertUnsupportedUtility orig_map
-		VrayFakeFresnelTex: errorCatching convertUnsupportedUtility orig_map
-		VrayGLSLTex: errorCatching convertUnsupportedUtility orig_map
-		VrayHairInfoTex: errorCatching convertUnsupportedUtility orig_map
-		VrayICC: errorCatching convertUnsupportedUtility orig_map
-		VrayLut: errorCatching convertUnsupportedUtility orig_map
-		VrayMultiSubTex: errorCatching convertUnsupportedUtility orig_map
-		VrayNoiseTex: errorCatching convertUnsupportedUtility orig_map
-		VrayOCIO: errorCatching convertUnsupportedUtility orig_map
-		VrayOSLText: errorCatching convertUnsupportedUtility orig_map
-		VrayParticleTex: errorCatching convertUnsupportedUtility orig_map
-		VrayPluginNodeTex: errorCatching convertUnsupportedUtility orig_map
-		VrayPtex: errorCatching convertUnsupportedUtility orig_map
-		VraySamplerInfoTex: errorCatching convertUnsupportedUtility orig_map
-		VraySky: errorCatching convertUnsupportedUtility orig_map
-		VraySoftbox: errorCatching convertUnsupportedUtility orig_map
-		VrayTriplanarTex: errorCatching convertUnsupportedUtility orig_map
-		VrayUserColor: errorCatching convertUnsupportedUtility orig_map
-		VrayUserScalar: errorCatching convertUnsupportedUtility orig_map
-		
-		default: orig_map
-	)
-	
-	if new_map!=orig_map then ( 		-- if converted, add to the list of converted materials
-		append orig_maps orig_map
-		append new_maps new_map
-	)
-	new_map
-)
-
-fn convertVrayMaterial orig_mtl =(
-		
-	local i=findItem orig_mtls orig_mtl -- check if we have already converted this material
-	if i>0 then return new_mtls[i]  --if yes, just return the already converted one	
-	
-	-- recurse into sub-materials, if any
-	local sub_count_mtl=getNumSubMtls orig_mtl
-	if sub_count_mtl >= 1 then (
-		for mat=1 to sub_count_mtl do (
-			subMtl = getSubMtl orig_mtl mat
-			if subMtl != undefined do (
-				setSubMtl orig_mtl mat (convertVrayMaterial subMtl)
-			)
-		)
-	)
-
-	local sub_count_map=getNumSubTexmaps orig_mtl
-	if sub_count_map >= 1 then (
-		for mp=1 to sub_count_map do (
-			newMap = convertVrayUtilities (getSubTexmap orig_mtl mp)
-			setSubTexmap orig_mtl mp newMap
-		)
-	)
-	
-	cls=classof orig_mtl
-	local new_mtl=case cls of (
+	cls = classof orig_mtl
+	local new_mtl = case cls of (
+		-- MATERIALS
+		Multimaterial: errorCatching convertMultimaterial orig_mtl
 		VrayMtl: errorCatching convertVrayMtl orig_mtl
 		VrayLightMtl: errorCatching convertVrayLightMtl orig_mtl 
 		VrayBlendMtl: errorCatching convertVrayBlendMtl orig_mtl
@@ -1219,7 +1432,41 @@ fn convertVrayMaterial orig_mtl =(
 		VraySwitchMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayVectorDisplBake: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayVrmatMtl: errorCatching convertUnsupportedMtl orig_mtl 
+
+		-- UTILITIES
+		VrayCompTex: errorCatching convertVrayCompTex orig_mtl
+		VrayColor: errorCatching convertVrayColor orig_mtl
+		VrayBump2Normal: errorCatching convertVrayBump2Normal orig_mtl
+		VrayDirt: errorCatching convertVrayDirt orig_mtl
+		VrayNormalMap: errorCatching convertVrayNormalMap orig_mtl
+		VrayHDRI: errorCatching convertVrayHDRI orig_mtl
+		VrayCurvature: errorCatching convertVrayCurvature orig_mtl
+		OSLMap: errorCatching convertOSLMap orig_mtl
+
+		--following utilies will be replaced with default rpr arithmetic node, will be supported later
+		VrayColor2Bump: errorCatching convertUnsupportedUtility orig_mtl
+		VrayDistanceTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayEdgesTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayFakeFresnelTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayGLSLTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayHairInfoTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayICC: errorCatching convertUnsupportedUtility orig_mtl
+		VrayLut: errorCatching convertUnsupportedUtility orig_mtl
+		VrayMultiSubTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayNoiseTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayOCIO: errorCatching convertUnsupportedUtility orig_mtl
+		VrayOSLText: errorCatching convertUnsupportedUtility orig_mtl
+		VrayParticleTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayPluginNodeTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayPtex: errorCatching convertUnsupportedUtility orig_mtl
+		VraySamplerInfoTex: errorCatching convertUnsupportedUtility orig_mtl
+		VraySky: errorCatching convertUnsupportedUtility orig_mtl
+		VraySoftbox: errorCatching convertUnsupportedUtility orig_mtl
+		VrayTriplanarTex: errorCatching convertUnsupportedUtility orig_mtl
+		VrayUserColor: errorCatching convertUnsupportedUtility orig_mtl
+		VrayUserScalar: errorCatching convertUnsupportedUtility orig_mtl
 		
+
 		default: orig_mtl
 	)
 	
@@ -1231,13 +1478,12 @@ fn convertVrayMaterial orig_mtl =(
 	new_mtl
 )
 
-fn convertVrayShape orig_shp =(
-		
-	local i=findItem orig_shps orig_shp -- check if we have already converted this shape
-	if i>0 then return new_shps[i]  --if yes, just return the already converted one	
+fn convertShape orig_shp =(
+	local i = findItem orig_shps orig_shp -- check if we have already converted this shape
+	if i > 0 then return new_shps[i]  --if yes, just return the already converted one	
 	
-	cls=classof orig_shp
-	local new_shp=case cls of (
+	cls = classof orig_shp
+	local new_shp = case cls of (
 		VraySphere: errorCatching convertVraySphere orig_shp
 		VrayPlane: errorCatching convertVrayPlane orig_shp
 		Plane: errorCatching convertPlane orig_shp
@@ -1245,7 +1491,7 @@ fn convertVrayShape orig_shp =(
 		default: orig_shp
 	)
 	
-	if new_shp != orig_shp then ( 		-- if converted, add to the list of converted materials
+	if new_shp != orig_shp then ( 	-- if converted, add to the list of converted materials
 		append orig_shps orig_shp
 		append new_shps new_shp
 	)
@@ -1255,7 +1501,7 @@ fn convertVrayShape orig_shp =(
 
 fn cleanUpConversionData =(
 
-	delete (for elem in new_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
+	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
 	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
 	delete (for elem in orig_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
 
@@ -1267,8 +1513,6 @@ fn cleanUpConversionData =(
     new_shps=#()
 	orig_mtls=#()
 	new_mtls=#()
-	orig_maps=#()
-	new_maps=#()
 	orig_lights=#()
 	new_lights=#()
 	orig_cameras=#()
@@ -1278,75 +1522,55 @@ fn cleanUpConversionData =(
 	true
 )
 
+--get all objects with such material
+fn getObjsFromMaterial current_material  =(
+	obj_arr = for o in geometry where o.material == current_material collect o
+	return obj_arr
+)
+
 fn convertScene =(
 	
 	start = timeStamp()
 
+	startConversion()
+
 	-- shapes conversion
-	vrayShapes = #("VraySphere", "VrayPlane", "Plane")
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
-	for i in vrayShapeInstances do(
-		errorCatching convertVrayShape i
-	)
+	for i in vrayShapeInstances do convertShape i
 	
 	-- material conversion
-	vrayMtlClasses = #("VRayMtl", "VRayMtlWrapper", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
+	vrayMtlClasses = #("Multimaterial", "VRayMtl", "VRayMtlWrapper", "VRayLightMtl", "VRay2SidedMtl", "VRayALSurfaceMtl", \
 	"VRayBlendMtl", "VRayBumpMtl", "VRayCarPaintMtl", "VRayFlakesMtl", "VRayFastSSS2", "VRayScatterVolume", \
 	"VRayOverrideMtl", "VRayGLSLMtl", "VRayHairMtl", "VRayHairNextMtl", "VRayMDLMtl", "VRayOSLMtl", "VRayPluginNodeMtl", \
 	"VRayPointParticleMtl", "VRayScannedMtl", "VRayStochasticFlakesMtl", "VRaySwitchMtl", "VRayVectorDisplBake", "VRayVRmatMtl")
 
 	for c in vrayMtlClasses do ( --where c.creatable 
-		cls = execute c
-		if classof cls == material do(
-			-- get all materials from scene
-			clssInst = getclassinstances cls
-			for i in clssInst do(
-				newMat = errorCatching convertVrayMaterial i
-				if newMat != "no_replace" do (
-					replaceInstances i newMat
+		cls = execute c -- execute obj from string
+		if classof cls == material do( -- check superclass
+			clssInst = getclassinstances cls -- get all class instances from scene
+			for i in clssInst do (
+				obj_arr = getObjsFromMaterial i -- get all geometry from this material
+				if obj_arr.count > 0 do (
+					newMat = convertMaterial i -- convert material
+					if newMat != "no_replace" do (
+						for g in obj_arr do g.material = newMat -- replace arnold material
+					)
 				)
 			)
 		)
 	)
 	
-	vrayMapClasses = #("VrayCompTex", "VrayColor", "VrayBump2Normal", "VrayDirt", "VrayNormalMap", "VrayHDRI", 
-		"VrayColor2Bump", "VrayCurvature", "VrayDistanceTex", "VrayEdgesTex", "VrayFakeFresnelTex", "VrayGLSLTex", "VrayHairInfoTex", 
-		"VrayICC", "VrayLut", "VrayMultiSubTex", "VrayNoiseTex", "VrayOCIO", "VrayOSLText", "VrayParticleTex", "VrayPluginNodeTex", "VrayPtex", 
-		"VraySamplerInfoTex", "VraySky", "VraySoftbox", "VrayTriplanarTex", "VrayUserColor", "VrayUserScalar", "OSLMap")
-
-	-- map conversion
-	for c in vrayMapClasses do(
-		cls = execute c
-		if classof cls == textureMap do(
-			classInst = getclassinstances cls
-			for i in classInst do(
-				newMap = errorCatching convertVrayUtilities i
-				replaceInstances i newMap
-			)
-		)
-	)
-
 	-- light conversion
 	allLights = for o in objects where superclassof o == light and o.category == #vray collect o
-	for i in allLights do(
-		newLight = convertLights i
-		if newLight != "no_replace" do (
-			replaceInstances i newLight
-		)
-	)
-	
+	for i in allLights do convertLight i
 	
 	-- camera conversion
 	allCameras = for o in objects where superclassof o == camera collect o
 	for i in allCameras do(
-		newCamera = errorCatching convertCameras i
+		newCamera = convertCamera i
 		replaceInstances i newCamera	
 	)
 	
-			
-	end = timeStamp()
-	print("Scene conversion took " +  ((end - start) / 1000.0) as string + " seconds ")
-	print("Converted: " + new_mtls.count as string + " materials, " + new_maps.count as string + " utilities and " + new_lights.count as string + " lights.")
 
 	vr = vray()
 	if classof renderers.current == classof vr do (
@@ -1365,6 +1589,12 @@ fn convertScene =(
 	renderers.current.texturecompression = true
 
 	SceneExposureControl.exposureControl = undefined
+
+	end = timeStamp()
+	total_time = (end - start) / 1000.0
+	print("Scene conversion took " + total_time as string + " seconds.")
+	print("Converted: " + new_mtls.count as string + " materials, " + new_lights.count as string + " lights.")
+	finishConversion total_time
 
 	cleanUpConversionData()
 	
