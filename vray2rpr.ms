@@ -1126,15 +1126,15 @@ fn convertVrayLight origLight = (
 		normalize_color = get_property origLight "normalizeColor"
 		if normalize_color == 0 do ( -- image
 			set_property r "UnitsType" 0
-			set_property r "LightIntensity" (get_property origLight "multiplier" * 2.5)
+			set_property r "LightIntensity" (get_property origLight "multiplier" * 1.2)
 		) 
 		if normalize_color == 1 do ( -- luminous
 			set_property r "UnitsType" 0
-			set_property r "LightIntensity" (get_property origLight "multiplier" / 10000000)
+			set_property r "LightIntensity" (get_property origLight "multiplier" / 949999905)
 		)
 		if normalize_color == 2 do ( -- luminance
 			set_property r "UnitsType" 0
-			set_property r "LightIntensity" (get_property origLight "multiplier" / 10000)
+			set_property r "LightIntensity" (get_property origLight "multiplier" / 397.7)
 		)
 		if normalize_color == 3 do ( -- radiant power
 			set_property r "UnitsType" 1
