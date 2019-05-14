@@ -3,8 +3,6 @@
 
 	Vray to RadeonProRender Converter
 
-	dev test branch
-
 	History:
 	v.1.0 - first release
 	v.1.1 - VrayDirt, VrayNormalMap 
@@ -116,9 +114,7 @@ fn end_log conv_obj =(
 	write_own_property_log msg
 )
 
-fn convertMaterial orig_mtl =(
-		
-)
+fn convertMaterial orig_mtl =()
 
 fn get_property value_mat value_attr =(
 	try (
@@ -951,7 +947,7 @@ fn convertVrayDistanceTex origMap = (
 
 fn convertVrayOCIO origMap = (
 	
-	r = get_property origMap "gen_basemap"
+	local r = get_property origMap "gen_basemap"
 
 	-- log to file 
 	start_log origMap r
@@ -1555,7 +1551,6 @@ fn convertMaterial orig_mtl =(
 		VraySky: errorCatching convertUnsupportedUtility orig_mtl
 		VraySoftbox: errorCatching convertUnsupportedUtility orig_mtl
 		VrayTriplanarTex: errorCatching convertUnsupportedUtility orig_mtl
-		
 		VrayUserScalar: errorCatching convertUnsupportedUtility orig_mtl
 		
 
