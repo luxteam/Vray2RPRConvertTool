@@ -3,6 +3,8 @@
 
 	Vray to RadeonProRender Converter
 
+	dev test branch
+
 	History:
 	v.1.0 - first release
 	v.1.1 - VrayDirt, VrayNormalMap 
@@ -114,6 +116,10 @@ fn end_log conv_obj =(
 	write_own_property_log msg
 )
 
+fn convertMaterial orig_mtl =(
+		
+)
+
 fn get_property value_mat value_attr =(
 	try (
 		obj_value = getProperty value_mat value_attr
@@ -123,26 +129,6 @@ fn get_property value_mat value_attr =(
 		print("Stack trace: " + getCurrentExceptionStackTrace())
 		msg = StringStream ""
 		format "[ERROR] There is no %.% field in this node. Check the field and try again." value_mat.name value_attr to: msg
-		write_own_property_log msg
-	)
-)
-
-fn copy_property rpr_mat conv_mat rpr_attr conv_attr =(
-	try (
-		rpr_value = get_property rpr_mat rpr_attr
-		conv_value = get_property conv_mat conv_attr
-		if classof rpr_value == UndefinedClass then (
-			convObj = errorCatching convertMaterial conv_value
-			set_property rpr_mat rpr_attr convObj
-		) else (
-			set_property rpr_mat rpr_attr conv_value
-		)
-		write_converted_property_log rpr_mat conv_mat rpr_attr conv_attr
-	) catch (
-		print("Exception:" + getCurrentException())
-		print("Stack trace: " + getCurrentExceptionStackTrace())
-		msg = StringStream ""
-		format "[ERROR] Error while converting from %.% to %.%" conv_mat.name conv_attr rpr_mat.name rpr_attr to: msg
 		write_own_property_log msg
 	)
 )
@@ -157,6 +143,26 @@ fn set_property obj obj_property value =(
 		print("Exception:" + getCurrentException())
 		print("Stack trace: " + getCurrentExceptionStackTrace())
 		format "\t[ERROR] Set value % to %.% is failed. Check the values and their boundaries." value obj.name property_name to: msg
+		write_own_property_log msg
+	)
+)
+
+fn copy_property rpr_mat conv_mat rpr_attr conv_attr =(
+	try (
+		rpr_value = get_property rpr_mat rpr_attr
+		conv_value = get_property conv_mat conv_attr
+		if classof rpr_value == UndefinedClass then (
+			convObj = convertMaterial conv_value
+			set_property rpr_mat rpr_attr convObj
+		) else (
+			set_property rpr_mat rpr_attr conv_value
+		)
+		write_converted_property_log rpr_mat conv_mat rpr_attr conv_attr
+	) catch (
+		print("Exception:" + getCurrentException())
+		print("Stack trace: " + getCurrentExceptionStackTrace())
+		msg = StringStream ""
+		format "[ERROR] Error while converting from %.% to %.%" conv_mat.name conv_attr rpr_mat.name rpr_attr to: msg
 		write_own_property_log msg
 	)
 )
@@ -904,6 +910,58 @@ fn convertVrayCurvature origMap = (
 	r
 )
 
+fn convertVrayUserColor origMap = (
+	local r = rpr_color_value()
+	r.name = origMap.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMap r
+	
+	copy_property r origMap "Color" "default_color"
+	copy_property r origMap "colorTexmap" "default_texmap"
+
+	-- logging
+	end_log origMap
+
+	r
+)
+
+fn convertVrayDistanceTex origMap = (
+
+	-- log to file 
+	start_log origMap "Bitmap"
+	end_log origMap
+
+	if get_property origMap "texmap_near" != undefined do (
+		return (get_property origMap "texmap_near")
+	)
+	if get_property origMap "texmap_far" != undefined do (
+		return (get_property origMap "texmap_far")
+	)
+	if get_property origMap "texmap_inside" != undefined do (
+		return (get_property origMap "texmap_inside")
+	)
+	if get_property origMap "texmap_distance" != undefined do (
+		return (get_property origMap "texmap_distance")
+	)
+	if get_property origMap "texmap_outside" != undefined do (
+		return (get_property origMap "texmap_outside")
+	)
+)
+
+fn convertVrayOCIO origMap = (
+	
+	r = get_property origMap "gen_basemap"
+
+	-- log to file 
+	start_log origMap r
+	
+	-- logging
+	end_log origMap
+
+	r
+)
+
 fn convertVrayHDRI origMap = (
 	local r = BitmapTexture()
 	r.name = origMap.name + rprPostfixStr
@@ -1474,11 +1532,13 @@ fn convertMaterial orig_mtl =(
 		VrayNormalMap: errorCatching convertVrayNormalMap orig_mtl
 		VrayHDRI: errorCatching convertVrayHDRI orig_mtl
 		VrayCurvature: errorCatching convertVrayCurvature orig_mtl
+		VrayUserColor: errorCatching convertVrayUserColor orig_mtl
+		VrayOCIO: errorCatching convertVrayOCIO orig_mtl
+		VrayDistanceTex: errorCatching convertVrayDistanceTex orig_mtl
 		OSLMap: errorCatching convertOSLMap orig_mtl
 
 		--following utilies will be replaced with default rpr arithmetic node, will be supported later
 		VrayColor2Bump: errorCatching convertUnsupportedUtility orig_mtl
-		VrayDistanceTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayEdgesTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayFakeFresnelTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayGLSLTex: errorCatching convertUnsupportedUtility orig_mtl
@@ -1487,7 +1547,6 @@ fn convertMaterial orig_mtl =(
 		VrayLut: errorCatching convertUnsupportedUtility orig_mtl
 		VrayMultiSubTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayNoiseTex: errorCatching convertUnsupportedUtility orig_mtl
-		VrayOCIO: errorCatching convertUnsupportedUtility orig_mtl
 		VrayOSLText: errorCatching convertUnsupportedUtility orig_mtl
 		VrayParticleTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayPluginNodeTex: errorCatching convertUnsupportedUtility orig_mtl
@@ -1496,7 +1555,7 @@ fn convertMaterial orig_mtl =(
 		VraySky: errorCatching convertUnsupportedUtility orig_mtl
 		VraySoftbox: errorCatching convertUnsupportedUtility orig_mtl
 		VrayTriplanarTex: errorCatching convertUnsupportedUtility orig_mtl
-		VrayUserColor: errorCatching convertUnsupportedUtility orig_mtl
+		
 		VrayUserScalar: errorCatching convertUnsupportedUtility orig_mtl
 		
 
@@ -1579,7 +1638,7 @@ fn convertScene =(
 
 	for c in vrayMtlClasses do ( --where c.creatable 
 		cls = execute c -- execute obj from string
-		if classof cls == material do( -- check superclass
+		if classof cls == material do ( -- check superclass
 			clssInst = getclassinstances cls -- get all class instances from scene
 			for i in clssInst do (
 				obj_arr = getObjsFromMaterial i -- get all geometry from this material
