@@ -124,7 +124,7 @@ fn get_property value_mat value_attr =(
 		print("Exception:" + getCurrentException())
 		print("Stack trace: " + getCurrentExceptionStackTrace())
 		msg = StringStream ""
-		format "[ERROR] There is no %.% field in this node. Check the field and try again." value_mat.name value_attr to: msg
+		format "[ERROR] There is no %.% field in this node. Check the field and try again." (value_mat as string) value_attr to: msg
 		write_own_property_log msg
 	)
 )
@@ -133,12 +133,12 @@ fn set_property obj obj_property value =(
 	try (
 		msg = StringStream ""
 		setProperty obj obj_property value
-		format "\tSet value % to %.%" value obj obj_property to: msg
+		format "\tSet value % to %.%" value (obj as string) obj_property to: msg
 		write_own_property_log msg
 	) catch (
 		print("Exception:" + getCurrentException())
 		print("Stack trace: " + getCurrentExceptionStackTrace())
-		format "\t[ERROR] Set value % to %.% is failed. Check the values and their boundaries." value obj.name property_name to: msg
+		format "\t[ERROR] Set value % to %.% is failed. Check the values and their boundaries." value (obj as string) obj_property to: msg
 		write_own_property_log msg
 	)
 )
@@ -158,7 +158,7 @@ fn copy_property rpr_mat conv_mat rpr_attr conv_attr =(
 		print("Exception:" + getCurrentException())
 		print("Stack trace: " + getCurrentExceptionStackTrace())
 		msg = StringStream ""
-		format "[ERROR] Error while converting from %.% to %.%" conv_mat.name conv_attr rpr_mat.name rpr_attr to: msg
+		format "[ERROR] Error while converting from %.% to %.%" (conv_mat as string) conv_attr (rpr_mat as string) rpr_attr to: msg
 		write_own_property_log msg
 	)
 )
@@ -351,8 +351,12 @@ fn convertVrayMtl origMtl =(
 	)
 	
 	if get_property origMtl "texmap_bump_on" do (
+		normal_map = RPR_Normal()
+		set_property normal_map "isBump" true
+		set_property normal_map "strength" (get_property origMtl "texmap_bump_multiplier" / 100)
+		copy_property normal_map origMtl "map" "texmap_bump"
 		set_property r "normalEnable" true
-		copy_property r origMtl "normalTexmap" "texmap_bump"
+		set_property r "normalTexmap" normal_map
 	)
 
 	if get_property origMtl "texmap_displacement_on" do (
@@ -1203,6 +1207,7 @@ fn convertVrayLight origLight = (
 		copy_property r origLight "colourMode" "color_mode"
 		copy_property r origLight "colourPicker" "color"
 		copy_property r origLight "temperature" "color_temperature"
+		copy_property r origLight "TemperatureColour" "color"
 
 		if areaShape == 2 or areaShape == 0 do (
 			copy_property r origLight "areaWidths" "sizeLength"
@@ -1401,10 +1406,19 @@ fn convertVrayPhysicalCamera origCamera =(
 	-- log to file 
 	start_log origCamera r
 
+	-- position conversion
+	set_property origCamera "targeted" false
+	copy_property r origCamera "pos" "pos"
+	copy_property r origCamera "rotation" "rotation"
+	copy_property r origCamera "scale" "scale"
+	copy_property r origCamera "pivot" "pivot"
+	copy_property r origCamera "transform" "transform"
+	copy_property r origCamera "dir" "dir"
+
 	copy_property r origCamera "targetDistance" "target_distance"
 	copy_property r origCamera "showCone" "show_camera_cone"
 	copy_property r origCamera "fov" "fov"
-	copy_property r origCamera "mpassEffect.useTargetDistance" "use_dof"
+	copy_property r.mpassEffect origCamera "useTargetDistance" "use_dof"
 	copy_property r origCamera "clipManually" "clip_on"
 	copy_property r origCamera "nearclip" "clip_near"
 	copy_property r origCamera "farclip" "clip_far"
@@ -1424,6 +1438,17 @@ fn convertVrayDomeCamera origCamera =(
 
 	-- log to file 
 	start_log origCamera r
+
+	-- position conversion
+	set_property origCamera "targeted" false
+	copy_property r origCamera "pos" "pos"
+	copy_property r origCamera "rotation" "rotation"
+	copy_property r origCamera "scale" "scale"
+	copy_property r origCamera "pivot" "pivot"
+	copy_property r origCamera "transform" "transform"
+	copy_property r origCamera "dir" "dir"
+
+	-- logging
 	end_log origCamera
 
 	r
@@ -1589,7 +1614,7 @@ fn convertShape orig_shp =(
 fn cleanUpConversionData =(
 
 	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
-	delete (for elem in new_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
+	delete (for elem in orig_cameras where (superclassof elem == camera) and isvalidnode elem collect elem) 
 	delete (for elem in orig_shps where (superclassof elem == GeometryClass) and isvalidnode elem collect elem) 
 
 	-- delete AOVs
