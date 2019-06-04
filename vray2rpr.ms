@@ -1623,6 +1623,10 @@ fn convertShape orig_shp =(
 	new_shp
 )
 
+fn convertEnvironment =(
+
+)
+
 fn cleanUpConversionData =(
 
 	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
@@ -1652,11 +1656,38 @@ fn getObjsFromMaterial current_material  =(
 	return obj_arr
 )
 
+fn checkPluginExists =(
+	exists = true
+	if classof Radeon_Prorender == UndefinedClass do (
+		rollout parent_dialog "Vray Converter"(
+			label l1 "Error! Radeon ProRender plugin isn't installed!"
+			label l2 "You need install it, before using converter."
+		)
+		createDialog parent_dialog width:300 heiht:200
+		exists = false
+	)
+	if classof Vray == UndefinedClass do (
+		rollout parent_dialog "Vray Converter"(
+			label l1 "Error! Vray plugin isn't installed!"
+			label l2 "You need install it, before using converter."
+		)
+		createDialog parent_dialog width:300 heiht:200
+		exists = false
+	)
+	return exists
+)
+
 fn convertScene =(
 	
 	start = timeStamp()
 
 	startConversion()
+
+	vr = vray()
+	if classof renderers.current != classof vr do renderers.current = vr
+
+	-- Environment conversion
+	convertEnvironment()
 
 	-- shapes conversion
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
@@ -1695,8 +1726,6 @@ fn convertScene =(
 		replaceInstances i newCamera	
 	)
 	
-
-	vr = vray()
 	if classof renderers.current == classof vr do (
 		if not renderers.current.output_getsetsfrommax do (
 			vray_render = renderers.current
@@ -1725,6 +1754,9 @@ fn convertScene =(
 )
 
 if not globalVars.isglobal(#autoLaunch) do (
-     convertScene()
+	if checkPluginExists() do (
+		convertScene()
+	)
+    
 )
 
