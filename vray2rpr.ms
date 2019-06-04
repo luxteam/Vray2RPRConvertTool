@@ -1431,7 +1431,7 @@ fn convertVrayPhysicalCamera origCamera =(
 
 fn convertVrayDomeCamera origCamera =(
 
-	local r = Freecamera()
+	local r = Physical_Camera()
 	r.name = origCamera.name + unsupportedPostfixStr
 
 	-- log to file 
@@ -1445,6 +1445,8 @@ fn convertVrayDomeCamera origCamera =(
 	copy_property r origCamera "pivot" "pivot"
 	copy_property r origCamera "transform" "transform"
 	copy_property r origCamera "dir" "dir"
+
+	copy_property r origCamera "focal_length_mm" "fov"
 
 	-- logging
 	end_log origCamera
