@@ -1243,11 +1243,9 @@ fn convertVrayLight origLight = (
 			copy_property rpr origLight "backgroundIntensity" "multiplier"
 			copy_property rpr origLight "backgroundColor" "color"
 
-		    -- rotate IBL
-			clearSelection()
-			select $RPREnv001
-			$.rotation = quat 0 0 0.707107 0.707107
-			clearSelection()
+			transform_ibl = $RPREnv001
+			copy_property transform_ibl origLight "rotation" "rotation"
+			rotate transform_ibl (eulerangles 0 0 90)
 
 			-- logging
 			end_log origLight
