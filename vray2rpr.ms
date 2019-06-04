@@ -338,6 +338,18 @@ fn convertVrayMtl origMtl =(
 	copy_property r origMtl "refractionAbsorptionColor" "refraction_fogColor"
 	copy_property r origMtl "refractionAbsorptionColorTexmap" "texmap_refraction_fog"
 
+	-- translucency
+	if get_property origMtl "translucency_on" == 1 do (
+		set_property r "refractionEnable" false
+		set_property r "DiffuseSeparateBackScatteringColor" true
+		copy_property r origMtl "DiffuseBackScatteringColor" "translucency_color"
+		set_property r "SssEnable" true
+		copy_property r origMtl "SssColor" "translucency_color"
+		refraction_color = get_property origMtl "Refraction"
+		backscatteringWeight = 0.2126 * refraction_color.red + 0.7152 * refraction_color.green + 0.0722 * refraction_color.blue
+		set_property r "DiffuseBackscatteringWeight" backscatteringWeight
+	)
+
 	-- emission
 	defaultEnable r "emissiveEnable" origMtl "selfIllumination" "texmap_self_illumination"
 	copy_property r origMtl "emissiveColor" "selfIllumination"
@@ -350,7 +362,7 @@ fn convertVrayMtl origMtl =(
 		invertMap r origMtl "transparencyTexmap" "texmap_opacity"
 	)
 	
-	if get_property origMtl "texmap_bump_on" do (
+	if get_property origMtl "texmap_bump" != undefined  do (
 		normal_map = RPR_Normal()
 		set_property normal_map "isBump" true
 		set_property normal_map "strength" (get_property origMtl "texmap_bump_multiplier" / 100)
