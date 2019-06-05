@@ -338,6 +338,12 @@ fn convertVrayMtl origMtl =(
 	copy_property r origMtl "refractionAbsorptionColor" "refraction_fogColor"
 	copy_property r origMtl "refractionAbsorptionColorTexmap" "texmap_refraction_fog"
 
+	if get_property origMtl "refraction_fogMult" > 0 do (
+		copy_property r origMtl "refractionColor" "refraction_fogColor"
+		copy_property r origMtl "refractionColorTexmap" "texmap_refraction_fog"
+	)
+
+
 	-- translucency
 	if get_property origMtl "translucency_on" == 1 do (
 		set_property r "refractionEnable" false
@@ -1624,7 +1630,29 @@ fn convertShape orig_shp =(
 )
 
 fn convertEnvironment =(
+	if useEnvironmentMap and classof environmentMap == VRaySky then (
 
+		rpr = Radeon_ProRender()
+
+		-- log to file 
+		start_log environmentMap rpr
+
+		set_property rpr "backgroundOverride" true
+		set_property rpr "backgroundType" 1
+
+		copy_property rpr environmentMap "backgroundSkyHaze" "sun_turbidity"
+		copy_property rpr environmentMap "backgroundSkyFilterColor" "sun_filter_color"
+		copy_property rpr environmentMap "backgroundSkySunDisc" "sun_size_multiplier"
+		copy_property rpr environmentMap "backgroundSkyGroundAlbedo" "ground_albedo"
+		copy_property rpr environmentMap "backgroundSkyIntensity" "sun_intensity_multiplier"
+
+		-- log to file 
+		end_log "3dsMax Environment"
+
+		environmentMap = undefined
+		useEnvironmentMap = false
+
+	)
 )
 
 fn cleanUpConversionData =(
