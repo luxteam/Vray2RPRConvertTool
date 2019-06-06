@@ -338,6 +338,24 @@ fn convertVrayMtl origMtl =(
 	copy_property r origMtl "refractionAbsorptionColor" "refraction_fogColor"
 	copy_property r origMtl "refractionAbsorptionColorTexmap" "texmap_refraction_fog"
 
+	if get_property origMtl "refraction_fogMult" > 0 do (
+		copy_property r origMtl "refractionColor" "refraction_fogColor"
+		copy_property r origMtl "refractionColorTexmap" "texmap_refraction_fog"
+	)
+
+
+	-- translucency
+	if get_property origMtl "translucency_on" == 1 do (
+		set_property r "refractionEnable" false
+		set_property r "DiffuseSeparateBackScatteringColor" true
+		copy_property r origMtl "DiffuseBackScatteringColor" "translucency_color"
+		set_property r "SssEnable" true
+		copy_property r origMtl "SssColor" "translucency_color"
+		refraction_color = get_property origMtl "Refraction"
+		backscatteringWeight = 0.2126 * refraction_color.red + 0.7152 * refraction_color.green + 0.0722 * refraction_color.blue
+		set_property r "DiffuseBackscatteringWeight" backscatteringWeight
+	)
+
 	-- emission
 	defaultEnable r "emissiveEnable" origMtl "selfIllumination" "texmap_self_illumination"
 	copy_property r origMtl "emissiveColor" "selfIllumination"
@@ -350,7 +368,7 @@ fn convertVrayMtl origMtl =(
 		invertMap r origMtl "transparencyTexmap" "texmap_opacity"
 	)
 	
-	if get_property origMtl "texmap_bump_on" do (
+	if get_property origMtl "texmap_bump" != undefined  do (
 		normal_map = RPR_Normal()
 		set_property normal_map "isBump" true
 		set_property normal_map "strength" (get_property origMtl "texmap_bump_multiplier" / 100)
@@ -1243,11 +1261,9 @@ fn convertVrayLight origLight = (
 			copy_property rpr origLight "backgroundIntensity" "multiplier"
 			copy_property rpr origLight "backgroundColor" "color"
 
-		    -- rotate IBL
-			clearSelection()
-			select $RPREnv001
-			$.rotation = quat 0 0 0.707107 0.707107
-			clearSelection()
+			transform_ibl = $RPREnv001
+			copy_property transform_ibl origLight "rotation" "rotation"
+			rotate transform_ibl (eulerangles 0 0 90)
 
 			-- logging
 			end_log origLight
@@ -1433,7 +1449,7 @@ fn convertVrayPhysicalCamera origCamera =(
 
 fn convertVrayDomeCamera origCamera =(
 
-	local r = Freecamera()
+	local r = Physical_Camera()
 	r.name = origCamera.name + unsupportedPostfixStr
 
 	-- log to file 
@@ -1447,6 +1463,8 @@ fn convertVrayDomeCamera origCamera =(
 	copy_property r origCamera "pivot" "pivot"
 	copy_property r origCamera "transform" "transform"
 	copy_property r origCamera "dir" "dir"
+
+	copy_property r origCamera "focal_length_mm" "fov"
 
 	-- logging
 	end_log origCamera
@@ -1611,6 +1629,32 @@ fn convertShape orig_shp =(
 	new_shp
 )
 
+fn convertEnvironment =(
+	if useEnvironmentMap and classof environmentMap == VRaySky then (
+
+		rpr = Radeon_ProRender()
+
+		-- log to file 
+		start_log environmentMap rpr
+
+		set_property rpr "backgroundOverride" true
+		set_property rpr "backgroundType" 1
+
+		copy_property rpr environmentMap "backgroundSkyHaze" "sun_turbidity"
+		copy_property rpr environmentMap "backgroundSkyFilterColor" "sun_filter_color"
+		copy_property rpr environmentMap "backgroundSkySunDisc" "sun_size_multiplier"
+		copy_property rpr environmentMap "backgroundSkyGroundAlbedo" "ground_albedo"
+		copy_property rpr environmentMap "backgroundSkyIntensity" "sun_intensity_multiplier"
+
+		-- log to file 
+		end_log "3dsMax Environment"
+
+		environmentMap = undefined
+		useEnvironmentMap = false
+
+	)
+)
+
 fn cleanUpConversionData =(
 
 	delete (for elem in orig_lights where (superclassof elem == light) and isvalidnode elem collect elem) 
@@ -1640,11 +1684,38 @@ fn getObjsFromMaterial current_material  =(
 	return obj_arr
 )
 
+fn checkPluginExists =(
+	exists = true
+	if classof Radeon_Prorender == UndefinedClass do (
+		rollout parent_dialog "Vray Converter"(
+			label l1 "Error! Radeon ProRender plugin isn't installed!"
+			label l2 "You need install it, before using converter."
+		)
+		createDialog parent_dialog width:300 heiht:200
+		exists = false
+	)
+	if classof Vray == UndefinedClass do (
+		rollout parent_dialog "Vray Converter"(
+			label l1 "Error! Vray plugin isn't installed!"
+			label l2 "You need install it, before using converter."
+		)
+		createDialog parent_dialog width:300 heiht:200
+		exists = false
+	)
+	return exists
+)
+
 fn convertScene =(
 	
 	start = timeStamp()
 
 	startConversion()
+
+	vr = vray()
+	if classof renderers.current != classof vr do renderers.current = vr
+
+	-- Environment conversion
+	convertEnvironment()
 
 	-- shapes conversion
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
@@ -1683,8 +1754,6 @@ fn convertScene =(
 		replaceInstances i newCamera	
 	)
 	
-
-	vr = vray()
 	if classof renderers.current == classof vr do (
 		if not renderers.current.output_getsetsfrommax do (
 			vray_render = renderers.current
@@ -1713,6 +1782,9 @@ fn convertScene =(
 )
 
 if not globalVars.isglobal(#autoLaunch) do (
-     convertScene()
+	if checkPluginExists() do (
+		convertScene()
+	)
+    
 )
 
