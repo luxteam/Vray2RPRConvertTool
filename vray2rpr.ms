@@ -613,6 +613,35 @@ fn convertVrayFastSSS2 origMtl =(
 	r
 )
 
+fn convertVrayScatterVolume origMtl =(
+	local r = RPR_Uber_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMtl r
+
+	-- diffuse
+	copy_property r origMtl "diffuseColor" "overall_color"
+	copy_property r origMtl "diffuseColorTexmap" "texmap_overall_color"
+	set_property r "diffuseSeparateBackScatteringColor" true
+	set_property r "diffuseBackscatteringWeight" 0.75
+	copy_property r origMtl "diffuseBackScatteringColor" "scatter_color"
+	copy_property r origMtl "diffuseBackScatteringColorTexmap" "texmap_scatter_color"
+	
+	set_property r "sssEnable" true
+	copy_property r origMtl "sssColor" "sss_color"
+	copy_property r origMtl "sssColorTexmap" "texmap_sss_color"
+	scatter_radius = get_property origMtl "scatter_radius"
+	set_property r "sssRadius" (point3 scatter_radius scatter_radius scatter_radius)
+	copy_property r origMtl "sssRadiusTexmap" "texmap_radius_color"
+	copy_property r origMtl "SssDirection" "phase_function"
+
+	-- logging
+	end_log origMtl
+
+	r
+)
+
 fn convertVrayMtlWrapper origMtl =(
 	local r = RPR_Shadow_Catcher_Material()
 	r.name = origMtl.name + rprPostfixStr
@@ -1548,11 +1577,11 @@ fn convertMaterial orig_mtl =(
 		Vray2SidedMtl: errorCatching convertVray2SidedMtl orig_mtl 
 		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl
 		VrayOverrideMtl: errorCatching convertVrayOverrideMtl orig_mtl  
+		VrayScatterVolume: errorCatching convertVrayScatterVolume orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
 		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayHairMtl: convertUnsupportedMtl orig_mtl 
 		VrayHairNextMtl: errorCatching convertUnsupportedMtl orig_mtl 
