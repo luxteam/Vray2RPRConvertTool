@@ -328,6 +328,10 @@ fn convertVrayMtl origMtl =(
 	defaultEnable r "refractionEnable" origMtl "refraction" "texmap_refraction"
 	copy_property r origMtl "refractionColor" "refraction"
 	copy_property r origMtl "refractionColorTexmap" "texmap_refraction"
+	refraction_color = get_property origMtl "refraction"
+	remap_refr_color = color (remap_value refraction_color.red 255 0 1 0) (remap_value refraction_color.green 255 0 1 0) (remap_value refraction_color.blue 255 0 1 0)
+	refr_weight = 0.2126 * remap_refr_color.red + 0.7152 * remap_refr_color.green + 0.0722 * remap_refr_color.blue
+	set_property r "refractionWeight" refr_weight
 	set_property r "refractionRoughness" (1 - get_property origMtl "refraction_glossiness")
 	invertMap r origMtl "refractionRoughnessTexmap" "texmap_refractionGlossiness"
 	
@@ -351,9 +355,7 @@ fn convertVrayMtl origMtl =(
 		copy_property r origMtl "DiffuseBackScatteringColor" "translucency_color"
 		set_property r "SssEnable" true
 		copy_property r origMtl "SssColor" "translucency_color"
-		refraction_color = get_property origMtl "Refraction"
-		backscatteringWeight = 0.2126 * refraction_color.red + 0.7152 * refraction_color.green + 0.0722 * refraction_color.blue
-		set_property r "DiffuseBackscatteringWeight" backscatteringWeight
+		set_property r "DiffuseBackscatteringWeight" refr_weight
 	)
 
 	-- emission
