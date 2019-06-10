@@ -379,7 +379,7 @@ fn convertVrayMtl origMtl =(
 		set_property r "normalTexmap" normal_map
 	)
 
-	if get_property origMtl "texmap_displacement_on" do (
+	if get_property origMtl "texmap_displacement" != undefined do (
 		set_property r "displacementEnable" true
 		copy_property r origMtl "displacementTexmap" "texmap_displacement"
 		set_property r "displacementMin" 0
@@ -516,6 +516,120 @@ fn convertVrayBlendMtl origMtl =(
 	r
 )
 
+fn convertVrayALSurfaceMtl origMtl =(
+	local r = RPR_Uber_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMtl r
+
+	-- diffuse
+	copy_property r origMtl "diffuseColor" "diffuse_color"
+	copy_property r origMtl "diffuseColorTexmap" "diffuse_color_texture"
+	copy_property r origMtl "diffuseWeight" "diffuse_strength"
+	copy_property r origMtl "diffuseWeightTexmap" "diffuse_strength_texture"
+
+	if get_property origMtl "diffuse_bump_texture_on" and get_property origMtl "diffuse_bump_texture" != undefined do (
+		set_property r "DiffuseUseShaderNormal" true
+		copy_property r origMtl "DiffuseNormalTexmap" "diffuse_bump_texture"
+	)
+
+	-- opacity
+	opacity_color = get_property origMtl "opacity"
+	opacity_color_remap = #((remap_value opacity_color.red 255 0 1 0), (remap_value opacity_color.green 255 0 1 0), (remap_value opacity_color.blue 255 0 1 0))
+	opacity_weight = 1 - amax opacity_color_remap
+	if opacity_weight > 0 do (
+		set_property r "TransparencyEnable" true
+		set_property r "transparency" opacity_weight
+	)
+	if get_property origMtl "opacity_texture" != undefined do (
+		set_property r "TransparencyEnable" true
+		invertMap r origMtl "transparencyTexmap" "opacity_texture"
+	)
+	
+	-- normal
+	if get_property origMtl "bump_texture_on" and get_property origMtl "bump_texture" != undefined  do (
+		normal_map = RPR_Normal()
+		set_property normal_map "isBump" true
+		set_property normal_map "strength" (get_property origMtl "bump_texture_multiplier" / 100)
+		copy_property normal_map origMtl "map" "bump_texture"
+		set_property r "normalEnable" true
+		set_property r "normalTexmap" normal_map
+	)
+
+	-- displacement
+	if get_property origMtl "displacement_texture_on" and get_property origMtl "displacement_texture" != undefined do (
+		set_property r "displacementEnable" true
+		copy_property r origMtl "displacementTexmap" "displacement_texture"
+		set_property r "displacementMin" 0
+		set_property r "displacementMax" (get_property origMtl "displacement_texture_multiplier" / 10.0)
+		set_property r "displacementSubdiv" 5
+	)
+
+	refl_array = #()
+	for i=1 to 2 do (
+		if get_property origMtl ("reflect" + i as string + "_strength") > 0 do (
+			append refl_array i
+		)
+	)
+
+	sss_array = #()
+	for i=1 to 3 do (
+		if get_property origMtl ("sss" + i as string + "_weight") > 0 do (
+			append sss_array i
+		)
+	)
+
+	fn convertReflection r origMtl m_count =(
+		set_property r "reflectionEnable" true
+		copy_property r origMtl "ReflectionColor" ("reflect" + m_count + "_color")
+		copy_property r origMtl "ReflectionColorTexmap" ("reflect" + m_count + "_color_texture")
+		copy_property r origMtl "ReflectionWeight" ("reflect" + m_count + "_strength")
+		copy_property r origMtl "ReflectionWeightTexmap" ("reflect" + m_count + "_strength_texture")
+		copy_property r origMtl "ReflectionRoughness" ("reflect" + m_count + "_roughness")
+		copy_property r origMtl "ReflectionRoughnessTexmap" ("reflect" + m_count + "_roughness_texture")
+		copy_property r origMtl "ReflectionIor" ("reflect" + m_count + "_ior")
+		copy_property r origMtl "ReflectionIorTexmap" ("reflect" + m_count + "_ior_texture")
+		copy_property r origMtl "ReflectionNormalTexmap" ("reflect" + m_count + "_bump_texture")
+	)
+
+	fn convertSSS r origMtl m_count =(
+		set_property r "SssEnable" true
+		copy_property r origMtl "SssColor" ("sss" + m_count + "_color")
+		copy_property r origMtl "SssColorTexmap" ("sss" + m_count + "_color_texture")
+		copy_property r origMtl "SssWeight" ("sss" + m_count + "_weight")
+		copy_property r origMtl "SssWeightTexmap" ("sss" + m_count + "_weight_texture")
+		sss_radius = get_property origMtl ("sss" + m_count + "_radius")
+		set_property r "SssRadius" (point3 sss_radius sss_radius sss_radius)
+		copy_property r origMtl "SssRadiusTexmap" ("sss" + m_count + "_radius_texture")
+	)
+
+	convertReflection r origMtl (refl_array[1] as string)
+	convertSSS r origMtl (sss_array[1] as string)
+
+	for i=2 to 3 do (
+		if refl_array.count >= i or sss_array.count >= i do (
+			uber = RPR_Uber_Material()
+			if refl_array.count >= i do (
+				convertReflection uber origMtl (refl_array[i] as string)
+			)
+			if sss_array.count >= i do (
+				convertSSS uber origMtl (sss_array[i] as string)
+			)
+			
+			old_r = r
+			r = RPR_Blend_Material()
+			r.material1 = old_r
+			r.material2 = uber
+		)
+	)
+	
+	-- logging
+	end_log origMtl
+
+	r
+)
+
 fn convertVrayBumpMtl origMtl =(
 	
 	local base_material = get_property origMtl "base_mtl"
@@ -602,7 +716,7 @@ fn convertVrayFastSSS2 origMtl =(
 		invertMap r origMtl "transparencyTexmap" "texmap_opacity"
 	)
 	
-	if get_property origMtl "texmap_bump_on" do (
+	if get_property origMtl "texmap_bump" != undefined do (
 		set_property r "normalEnable" true
 		copy_property r origMtl "normalTexmap" "texmap_bump"
 	)
@@ -1635,9 +1749,9 @@ fn convertMaterial orig_mtl =(
 		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl
 		VrayOverrideMtl: errorCatching convertVrayOverrideMtl orig_mtl  
 		VrayScatterVolume: errorCatching convertVrayScatterVolume orig_mtl 
+		VrayALSurfaceMtl: errorCatching convertVrayALSurfaceMtl orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
-		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayHairMtl: convertUnsupportedMtl orig_mtl 
