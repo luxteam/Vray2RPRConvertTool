@@ -1366,6 +1366,62 @@ fn convertVrayAmbientLight origLight = (
 	r
 )
 
+fn convertTargetLight origLight = (
+
+	if get_property origLight "Distribution" == 3 then (
+		local r = ies_light()
+		r.name = origLight.name + rprPostfixStr
+		
+		-- log to file 
+		start_log origLight r
+
+		-- On/Off, Include/exclude
+		copy_property r origLight "enabled" "on"
+
+		-- position conversion
+		copy_property r origLight "pos" "pos"
+		copy_property r origLight "scale" "scale"
+		copy_property r origLight "pivot" "pivot"
+		copy_property r origLight "transform" "transform"
+		copy_property r origLight "dir" "dir"
+
+		-- rotation XYZ
+		copy_property r origLight "rotationX" "xRotation"
+		copy_property r origLight "rotationY" "yRotation"
+		copy_property r origLight "rotationZ" "zRotation"
+
+		-- ies file
+		if get_property origLight "webfile" != "" and get_property origLight "webfile" != undefined do (
+			plugcfg = GetDir #plugcfg
+			profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
+			makeDir (profile_path)
+			ies_file = get_property origLight "webfile"
+			ies_name = (filterString ies_file "\\")
+			ies_name = ies_name[ies_name.count]
+			copyFile (ies_file) (profile_path + ies_name)
+			set_property r "profile" ies_name
+		)
+
+		-- Intensitiy, Color, Texmap
+		copy_property r origLight "intensity" "intensity"
+		copy_property r origLight "color" "color"
+		copy_property r origLight "temperature" "kelvin"
+
+		if get_property origLight "useKelvin" then (
+			set_property r "colorMode" 0
+		) else (
+			set_property r "colorMode" 1
+		)
+
+		-- logging
+		end_log origLight
+
+		r
+	) else (
+		return origLight
+	)
+)
+
 
 /* 
     SHAPES
@@ -1521,6 +1577,7 @@ fn convertLight orig_light =(
 		VrayIES: errorCatching convertVrayIES orig_light 
 		VraySun: errorCatching convertVraySun orig_light 
 		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
+		Target_Light: errorCatching convertTargetLight orig_light 
 		
 		default: orig_light
 	)
@@ -1775,7 +1832,7 @@ fn convertScene =(
 	)
 	
 	-- light conversion
-	allLights = for o in objects where superclassof o == light and o.category == #vray collect o
+	allLights = for o in objects where superclassof o == light collect o
 	for i in allLights do convertLight i
 	
 	-- camera conversion
