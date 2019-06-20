@@ -328,6 +328,10 @@ fn convertVrayMtl origMtl =(
 	defaultEnable r "refractionEnable" origMtl "refraction" "texmap_refraction"
 	copy_property r origMtl "refractionColor" "refraction"
 	copy_property r origMtl "refractionColorTexmap" "texmap_refraction"
+	refraction_color = get_property origMtl "refraction"
+	remap_refr_color = color (remap_value refraction_color.red 255 0 1 0) (remap_value refraction_color.green 255 0 1 0) (remap_value refraction_color.blue 255 0 1 0)
+	refr_weight = 0.2126 * remap_refr_color.red + 0.7152 * remap_refr_color.green + 0.0722 * remap_refr_color.blue
+	set_property r "refractionWeight" refr_weight
 	set_property r "refractionRoughness" (1 - get_property origMtl "refraction_glossiness")
 	invertMap r origMtl "refractionRoughnessTexmap" "texmap_refractionGlossiness"
 	
@@ -351,9 +355,7 @@ fn convertVrayMtl origMtl =(
 		copy_property r origMtl "DiffuseBackScatteringColor" "translucency_color"
 		set_property r "SssEnable" true
 		copy_property r origMtl "SssColor" "translucency_color"
-		refraction_color = get_property origMtl "Refraction"
-		backscatteringWeight = 0.2126 * refraction_color.red + 0.7152 * refraction_color.green + 0.0722 * refraction_color.blue
-		set_property r "DiffuseBackscatteringWeight" backscatteringWeight
+		set_property r "DiffuseBackscatteringWeight" refr_weight
 	)
 
 	-- emission
@@ -377,7 +379,7 @@ fn convertVrayMtl origMtl =(
 		set_property r "normalTexmap" normal_map
 	)
 
-	if get_property origMtl "texmap_displacement_on" do (
+	if get_property origMtl "texmap_displacement" != undefined do (
 		set_property r "displacementEnable" true
 		copy_property r origMtl "displacementTexmap" "texmap_displacement"
 		set_property r "displacementMin" 0
@@ -514,6 +516,120 @@ fn convertVrayBlendMtl origMtl =(
 	r
 )
 
+fn convertVrayALSurfaceMtl origMtl =(
+	local r = RPR_Uber_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMtl r
+
+	-- diffuse
+	copy_property r origMtl "diffuseColor" "diffuse_color"
+	copy_property r origMtl "diffuseColorTexmap" "diffuse_color_texture"
+	copy_property r origMtl "diffuseWeight" "diffuse_strength"
+	copy_property r origMtl "diffuseWeightTexmap" "diffuse_strength_texture"
+
+	if get_property origMtl "diffuse_bump_texture_on" and get_property origMtl "diffuse_bump_texture" != undefined do (
+		set_property r "DiffuseUseShaderNormal" true
+		copy_property r origMtl "DiffuseNormalTexmap" "diffuse_bump_texture"
+	)
+
+	-- opacity
+	opacity_color = get_property origMtl "opacity"
+	opacity_color_remap = #((remap_value opacity_color.red 255 0 1 0), (remap_value opacity_color.green 255 0 1 0), (remap_value opacity_color.blue 255 0 1 0))
+	opacity_weight = 1 - amax opacity_color_remap
+	if opacity_weight > 0 do (
+		set_property r "TransparencyEnable" true
+		set_property r "transparency" opacity_weight
+	)
+	if get_property origMtl "opacity_texture" != undefined do (
+		set_property r "TransparencyEnable" true
+		invertMap r origMtl "transparencyTexmap" "opacity_texture"
+	)
+	
+	-- normal
+	if get_property origMtl "bump_texture_on" and get_property origMtl "bump_texture" != undefined  do (
+		normal_map = RPR_Normal()
+		set_property normal_map "isBump" true
+		set_property normal_map "strength" (get_property origMtl "bump_texture_multiplier" / 100)
+		copy_property normal_map origMtl "map" "bump_texture"
+		set_property r "normalEnable" true
+		set_property r "normalTexmap" normal_map
+	)
+
+	-- displacement
+	if get_property origMtl "displacement_texture_on" and get_property origMtl "displacement_texture" != undefined do (
+		set_property r "displacementEnable" true
+		copy_property r origMtl "displacementTexmap" "displacement_texture"
+		set_property r "displacementMin" 0
+		set_property r "displacementMax" (get_property origMtl "displacement_texture_multiplier" / 10.0)
+		set_property r "displacementSubdiv" 5
+	)
+
+	refl_array = #()
+	for i=1 to 2 do (
+		if get_property origMtl ("reflect" + i as string + "_strength") > 0 do (
+			append refl_array i
+		)
+	)
+
+	sss_array = #()
+	for i=1 to 3 do (
+		if get_property origMtl ("sss" + i as string + "_weight") > 0 do (
+			append sss_array i
+		)
+	)
+
+	fn convertReflection r origMtl m_count =(
+		set_property r "reflectionEnable" true
+		copy_property r origMtl "ReflectionColor" ("reflect" + m_count + "_color")
+		copy_property r origMtl "ReflectionColorTexmap" ("reflect" + m_count + "_color_texture")
+		copy_property r origMtl "ReflectionWeight" ("reflect" + m_count + "_strength")
+		copy_property r origMtl "ReflectionWeightTexmap" ("reflect" + m_count + "_strength_texture")
+		copy_property r origMtl "ReflectionRoughness" ("reflect" + m_count + "_roughness")
+		copy_property r origMtl "ReflectionRoughnessTexmap" ("reflect" + m_count + "_roughness_texture")
+		copy_property r origMtl "ReflectionIor" ("reflect" + m_count + "_ior")
+		copy_property r origMtl "ReflectionIorTexmap" ("reflect" + m_count + "_ior_texture")
+		copy_property r origMtl "ReflectionNormalTexmap" ("reflect" + m_count + "_bump_texture")
+	)
+
+	fn convertSSS r origMtl m_count =(
+		set_property r "SssEnable" true
+		copy_property r origMtl "SssColor" ("sss" + m_count + "_color")
+		copy_property r origMtl "SssColorTexmap" ("sss" + m_count + "_color_texture")
+		copy_property r origMtl "SssWeight" ("sss" + m_count + "_weight")
+		copy_property r origMtl "SssWeightTexmap" ("sss" + m_count + "_weight_texture")
+		sss_radius = get_property origMtl ("sss" + m_count + "_radius")
+		set_property r "SssRadius" (point3 sss_radius sss_radius sss_radius)
+		copy_property r origMtl "SssRadiusTexmap" ("sss" + m_count + "_radius_texture")
+	)
+
+	convertReflection r origMtl (refl_array[1] as string)
+	convertSSS r origMtl (sss_array[1] as string)
+
+	for i=2 to 3 do (
+		if refl_array.count >= i or sss_array.count >= i do (
+			uber = RPR_Uber_Material()
+			if refl_array.count >= i do (
+				convertReflection uber origMtl (refl_array[i] as string)
+			)
+			if sss_array.count >= i do (
+				convertSSS uber origMtl (sss_array[i] as string)
+			)
+			
+			old_r = r
+			r = RPR_Blend_Material()
+			r.material1 = old_r
+			r.material2 = uber
+		)
+	)
+	
+	-- logging
+	end_log origMtl
+
+	r
+)
+
 fn convertVrayBumpMtl origMtl =(
 	
 	local base_material = get_property origMtl "base_mtl"
@@ -600,10 +716,39 @@ fn convertVrayFastSSS2 origMtl =(
 		invertMap r origMtl "transparencyTexmap" "texmap_opacity"
 	)
 	
-	if get_property origMtl "texmap_bump_on" do (
+	if get_property origMtl "texmap_bump" != undefined do (
 		set_property r "normalEnable" true
 		copy_property r origMtl "normalTexmap" "texmap_bump"
 	)
+
+	-- logging
+	end_log origMtl
+
+	r
+)
+
+fn convertVrayScatterVolume origMtl =(
+	local r = RPR_Uber_Material()
+	r.name = origMtl.name + rprPostfixStr
+
+	-- log to file 
+	start_log origMtl r
+
+	-- diffuse
+	copy_property r origMtl "diffuseColor" "overall_color"
+	copy_property r origMtl "diffuseColorTexmap" "texmap_overall_color"
+	set_property r "diffuseSeparateBackScatteringColor" true
+	set_property r "diffuseBackscatteringWeight" 0.75
+	copy_property r origMtl "diffuseBackScatteringColor" "scatter_color"
+	copy_property r origMtl "diffuseBackScatteringColorTexmap" "texmap_scatter_color"
+	
+	set_property r "sssEnable" true
+	copy_property r origMtl "sssColor" "sss_color"
+	copy_property r origMtl "sssColorTexmap" "texmap_sss_color"
+	scatter_radius = get_property origMtl "scatter_radius"
+	set_property r "sssRadius" (point3 scatter_radius scatter_radius scatter_radius)
+	copy_property r origMtl "sssRadiusTexmap" "texmap_radius_color"
+	copy_property r origMtl "SssDirection" "phase_function"
 
 	-- logging
 	end_log origMtl
@@ -634,117 +779,329 @@ fn convertVrayMtlWrapper origMtl =(
 )
 
 fn convertVrayPluginNodeMtl origMtl =(
-	if origMtl.plugin == "BRDFVRayMtl" then (
+
+	fn convertBRDFVRayMtl origMtl =(
 		r = RPR_Uber_Material()
 		r.name = origMtl.name + rprPostfixStr
 
-		useRoughness = origMtl.option_use_roughness
+		-- log to file 
+		start_log origMtl r
+
+		useRoughness = get_property origMtl "option_use_roughness"
 
 		-- diffuse
-		if origMtl.diffuse_use do (
-			r.diffuseColor = origMtl.diffuse_rgb
-			r.diffuseColorTexmap = origMtl.diffuse
-		) 
-		if origMtl.roughness_use do (
-			r.diffuseRoughnessTexmap = origMtl.roughness
-			r.diffuseRoughness = origMtl.roughness_rgb
-		)
+		copy_property r origMtl "diffuseColor" "diffuse_rgb"
+		copy_property r origMtl "diffuseColorTexmap" "diffuse"
+		copy_property r origMtl "diffuseRoughness" "roughness_rgb"
+		copy_property r origMtl "diffuseRoughnessTexmap" "roughness"
 
 		-- reflection
-		if origMtl.reflect_use do (
-			if origMtl.reflect_rgb.red > 0 or origMtl.reflect_rgb.green > 0 or origMtl.reflect_rgb.blue > 0 do ( r.reflectionEnable = true )
-			r.reflectionColor = origMtl.reflect_rgb
-			r.reflectionColorTexmap = origMtl.reflect
-		)
-		if origMtl.reflect_glossiness_use do (
-			if useRoughness then (
-				r.reflectionRoughness = origMtl.reflect_glossiness_rgb
-				r.reflectionRoughnessTexmap = origMtl.reflect_glossiness
-			) else (
-				r.reflectionRoughness = 1 - origMtl.reflect_glossiness_rgb
-				if origMtl.reflect_glossiness != undefined do (
-					arith = RPR_Arithmetic()
-					arith.operator = 1
-					arith.Color1 = color 255 255 255
-					arith.color1texmap = origMtl.reflect_glossiness
-					r.reflectionRoughnessTexmap = arith
-				)
-			)
-		)
-		if origMtl.metalness_use and origMtl.metalness_rgb > 0.01 do ( 
-			r.reflectionEnable = true
-			r.reflectionMode = 2
-			r.reflectionColor = origMtl.diffuse_rgb
-			r.reflectionColorTexmap = origMtl.diffuse
-		)
-		if origMtl.fresnel and origMtl.fresnel_ior_use do (
-			r.reflectionIor = origMtl.fresnel_ior_rgb
-			r.reflectionIorTexmap = origMtl.fresnel_ior
-		)
-		if origMtl.metalness_use do (
-			r.reflectionMetalness = origMtl.metalness_rgb
-			r.reflectionMetalnessTexmap = origMtl.metalness
+		defaultEnable r "reflectionEnable" origMtl "reflect_rgb" "reflect"
+		copy_property r origMtl "reflectionColor" "reflect_rgb"
+		copy_property r origMtl "reflectionColorTexmap" "reflect"
+		if useRoughness then (
+			copy_property r origMtl "reflectionRoughness" "reflect_glossiness_rgb"
+			copy_property r origMtl "reflectionRoughnessTexmap" "reflect_glossiness"
+		) else (
+			set_property r "reflectionRoughness" (1 - get_property origMtl "reflect_glossiness_rgb")
+			invertMap r origMtl "reflectionRoughnessTexmap" "reflect_glossiness"
 		)
 
-		if origMtl.anisotropy_use do (
-			r.reflectionAnisotropy = origMtl.anisotropy_rgb
-			r.reflectionAnisotropyTexmap = origMtl.anisotropy
+		if get_property origMtl "metalness_rgb" > 0.01 do ( 
+			set_property r "reflectionEnable" true
+			set_property r "reflectionMode" 2
+			copy_property r origMtl "reflectionColor" "diffuse_rgb"
+			copy_property r origMtl "reflectionColorTexmap" "diffuse"
 		)
-		if origMtl.anisotropy_rotation_use do (
-			r.reflectionAnisotropyRotation = origMtl.anisotropy_rotation_rgb
-			r.reflectionAnisotropyRotationTexmap = origMtl.anisotropy_rotation
-		)
+
+		copy_property r origMtl "reflectionIor" "fresnel_ior_rgb"
+		copy_property r origMtl "reflectionIorTexmap" "fresnel_ior"
+		copy_property r origMtl "reflectionMetalness" "metalness_rgb"
+		copy_property r origMtl "reflectionMetalnessTexmap" "metalness"
+
+		copy_property r origMtl "reflectionAnisotropy" "anisotropy_rgb"
+		copy_property r origMtl "reflectionAnisotropyTexmap" "anisotropy"
+		copy_property r origMtl "reflectionAnisotropyRotation" "anisotropy_rotation_rgb"
+		copy_property r origMtl "reflectionAnisotropyRotationTexmap" "anisotropy_rotation"
 
 		-- refraction
-		if origMtl.refract_use do (
-			if origMtl.refract_rgb.red > 0 or origMtl.refract_rgb.green > 0 or origMtl.refract_rgb.blue > 0 do ( r.refractionEnable = true )
-			r.refractionColor = origMtl.refract_rgb
-			r.refractionColorTexmap = origMtl.refract
-		)
-		if origMtl.refract_glossiness_use do (
-			r.refractionRoughness = 1 - origMtl.refract_glossiness_rgb
-			if origMtl.refract_glossiness != undefined do (
-				arith = RPR_Arithmetic()
-				arith.operator = 1
-				arith.Color1 = color 255 255 255
-				arith.color1texmap = origMtl.refract_glossiness
-				r.refractionRoughnessTexmap = arith
-			)
-		)
-		if origMtl.refract_ior_use do (
-			r.refractionIor = origMtl.refract_ior_rgb
-			r.refractionIorTexmap = origMtl.refract_ior
+		defaultEnable r "refractionEnable" origMtl "refract_rgb" "refract"
+		copy_property r origMtl "refractionColor" "refract_rgb"
+		copy_property r origMtl "refractionColorTexmap" "refract"
+		refraction_color = get_property origMtl "refract_rgb"
+		remap_refr_color = color (remap_value refraction_color.red 255 0 1 0) (remap_value refraction_color.green 255 0 1 0) (remap_value refraction_color.blue 255 0 1 0)
+		refr_weight = 0.2126 * remap_refr_color.red + 0.7152 * remap_refr_color.green + 0.0722 * remap_refr_color.blue
+		set_property r "refractionWeight" refr_weight
+		set_property r "refractionRoughness" (1 - get_property origMtl "refract_glossiness_rgb")
+		invertMap r origMtl "refractionRoughnessTexmap" "refract_glossiness"
+		
+		copy_property r origMtl "refractionIor" "refract_ior_rgb"
+		copy_property r origMtl "refractionIorTexmap" "refract_ior"
+
+		copy_property r origMtl "refractionAbsorptionDistance" "fog_mult"
+		copy_property r origMtl "refractionAbsorptionColor" "fog_color"
+		copy_property r origMtl "refractionAbsorptionColorTexmap" "fog_color_tex"
+
+		if get_property origMtl "fog_mult" > 0 do (
+			copy_property r origMtl "refractionColor" "fog_color"
+			copy_property r origMtl "refractionColorTexmap" "fog_color_tex"
 		)
 
-		r.refractionAbsorptionDistance = origMtl.fog_mult
-		if origMtl.fog_color_tex_use do (
-			r.refractionAbsorptionColor = origMtl.fog_color
-			r.refractionAbsorptionColorTexmap = origMtl.fog_color_tex
+		-- translucency
+		if get_property origMtl "translucency" == 1 do (
+			set_property r "refractionEnable" false
+			set_property r "DiffuseSeparateBackScatteringColor" true
+			copy_property r origMtl "DiffuseBackScatteringColor" "translucency_color_rgb"
+			set_property r "SssEnable" true
+			copy_property r origMtl "SssColor" "translucency_color_rgb"
+			set_property r "DiffuseBackscatteringWeight" refr_weight
 		)
 
 		-- emission
-		if origMtl.self_illumination_use do (
-			if origMtl.self_illumination_rgb.red > 0 or origMtl.self_illumination_rgb.green > 0 or origMtl.self_illumination_rgb.blue > 0 do ( r.emissiveEnable = true )
-			r.emissiveColor = origMtl.self_illumination_rgb
-			r.emissiveColorTexmap = origMtl.self_illumination
-			r.emissiveIntensity = origMtl.self_illumination_mul
-			r.emissiveWeight = 0.65
-		)
+		defaultEnable r "emissiveEnable" origMtl "self_illumination_rgb" "self_illumination"
+		copy_property r origMtl "emissiveColor" "self_illumination_rgb"
+		copy_property r origMtl "emissiveColorTexmap" "self_illumination"
+		copy_property r origMtl "emissiveIntensity" "self_illumination_mul"
+		set_property r "emissiveWeight" 0.65
 
-		if origMtl.opacity_use and origMtl.opacity != undefined do (
-			r.TransparencyEnable = true
-			arith = RPR_Arithmetic()
-			arith.operator = 1
-			arith.Color1 = color 255 255 255
-			arith.color1texmap = origMtl.opacity
-			r.transparencyTexmap = arith
+		-- difference from VrayMtl
+		if get_property origMtl "opacity_source" then (
+			if get_property origMtl "opacity_color" != undefined or get_property origMtl "opacity_color_rgb" != (color 255 255 255) do (
+				set_property r "TransparencyEnable" true
+				opacity_color = get_property origMtl "opacity_rgb"
+				opacity_color_remap = #((remap_value opacity_color.red 255 0 1 0), (remap_value opacity_color.green 255 0 1 0), (remap_value opacity_color.blue 255 0 1 0))
+				opacity_weight = 1 - amax opacity_color_remap
+				set_property r "transparency" (1 - get_property origMtl "opacity_rgb")
+				invertMap r origMtl "transparencyTexmap" "opacity_color"
+			)
+		) else (
+			if get_property origMtl "opacity" != undefined or get_property origMtl "opacity_rgb" < 1 do (
+				set_property r "TransparencyEnable" true
+				if get_property origMtl "opacity_rgb" < 1 then (
+					set_property r "transparency" (1 - get_property origMtl "opacity_rgb")
+				)
+				invertMap r origMtl "transparencyTexmap" "opacity"
+			)
 		)
+		
+		-- logging
+		end_log origMtl
 
-		r
-	) else (
-		r = convertUnsupportedMtl origMtl
 		r
 	)
+
+	fn convertBRDFCarPaint origMtl =(
+		r = RPR_Uber_Material()
+		r.name = origMtl.name + rprPostfixStr
+
+		-- log to file 
+		start_log origMtl r
+
+		copy_property r origMtl "diffuseColor" "base_color_rgb"
+		copy_property r origMtl "diffuseColorTexmap" "base_color"
+		
+		set_property r "reflectionEnable" true
+		copy_property r origMtl "ReflectionWeight" "base_reflection_rgb"
+		copy_property r origMtl "ReflectionWeightTexmap" "base_reflection"
+		set_property r "reflectionRoughness" (1 - get_property origMtl "base_glossiness_rgb")
+		invertMap r origMtl "reflectionRoughnessTexmap" "base_glossiness"
+		
+		set_property r "CoatingEnable" true
+		copy_property r origMtl "CoatingColor" "coat_color_rgb"
+		copy_property r origMtl "CoatingColorTexmap" "coat_color"
+		set_property r "CoatingWeight" 1
+		copy_property r origMtl "CoatingWeightTexmap" "coat_strength"
+		set_property r "CoatingRoughness" (1 - get_property origMtl "coat_glossiness_rgb")
+		invertMap r origMtl "CoatingRoughnessTexmap" "coat_glossiness"
+
+		-- logging
+		end_log origMtl
+
+		r
+	)
+
+	fn convertMtlOverride origMtl =(
+		local baseMtl = get_property origMtl "base_mtl"
+		if baseMtl == undefined do return RPR_Uber_Material()
+
+		materials = #()
+		if get_property origMtl "gi_mtl" != undefined do append materials (get_property origMtl "gi_mtl")
+		if get_property origMtl "reflect_mtl" != undefined do append materials (get_property origMtl "reflect_mtl")
+		if get_property origMtl "refract_mtl" != undefined do append materials (get_property origMtl "refract_mtl")
+
+		local rpr_material = convertMaterial baseMtl
+
+		if materials.count == 0 do return rpr_material
+
+		local r = RPR_Blend_Material() 
+		r.name = origMtl.name + rprPostfixStr
+
+		-- log to file 
+		start_log origMtl r
+
+		set_property r "material1" rpr_material
+		set_property r "weight" 0.5
+
+		-- materials conversion
+		first_material = true
+		for i in materials do (
+			if first_material then (
+				set_property r "material2" (convertMaterial i)
+				first_material = false
+			) else (
+				old_r = r
+				r = RPR_Blend_Material()
+				set_property r "material1" old_r
+				set_property r "material2" (convertMaterial i)
+				set_property r "weight" 0.5
+			)
+		)
+
+		-- logging
+		end_log origMtl
+
+		r
+	)
+
+	fn convertMtl2Sided origMtl =(
+		if get_property origMtl "front" != undefined then (
+			local base_material = get_property origMtl "front"
+		) else if get_property origMtl "back" != undefined then(
+			local base_material = get_property origMtl "back"
+		)
+
+		local rpr_material = convertMaterial base_material
+
+		-- log to file 
+		start_log origMtl rpr_material
+
+		if classof rpr_material == RPR_Uber_Material do (
+			set_property rpr_material "diffuseBackscatteringWeight" 1
+			set_property rpr_material "diffuseSeparateBackScatteringColor" true
+			copy_property rpr_material origMtl "diffuseBackScatteringColor" "translucency"
+			copy_property rpr_material origMtl "diffuseBackScatteringColorTexmap" "translucency_tex"
+		)
+
+		-- logging
+		end_log origMtl
+
+		rpr_material
+	)
+
+	fn convertBRDFAlSurface origMtl =(
+		local r = RPR_Uber_Material()
+		r.name = origMtl.name + rprPostfixStr
+
+		-- log to file 
+		start_log origMtl r
+
+		-- diffuse
+		copy_property r origMtl "diffuseColor" "diffuse_rgb"
+		copy_property r origMtl "diffuseColorTexmap" "diffuse"
+		copy_property r origMtl "diffuseWeight" "diffuse_strength_rgb"
+		copy_property r origMtl "diffuseWeightTexmap" "diffuse_strength"
+
+		if get_property origMtl "diffuse_bump_map_use" and get_property origMtl "diffuse_bump_map" != undefined do (
+			set_property r "DiffuseUseShaderNormal" true
+			copy_property r origMtl "DiffuseNormalTexmap" "diffuse_bump_map"
+		)
+
+		-- opacity
+		if get_property origMtl "opacity_rgb" < 1 or get_property origMtl "opacity" != undefined do (
+			set_property r "TransparencyEnable" true
+			if get_property origMtl "opacity_rgb" < 1 do (
+				set_property r "transparency" (1 - get_property origMtl "opacity_rgb")
+			)
+			invertMap r origMtl "transparencyTexmap" "opacity"
+		)
+		
+		-- normal
+		if get_property origMtl "bump_map_use" and get_property origMtl "bump_map" != undefined  do (
+			normal_map = RPR_Normal()
+			set_property normal_map "isBump" true
+			set_property normal_map "strength" (get_property origMtl "bump_map_mul" / 100)
+			copy_property normal_map origMtl "map" "bump_map"
+			set_property r "normalEnable" true
+			set_property r "normalTexmap" normal_map
+		)
+
+		refl_array = #()
+		for i=1 to 2 do (
+			if get_property origMtl ("reflect" + i as string + "_strength_rgb") > 0 do (
+				append refl_array i
+			)
+		)
+
+		sss_array = #()
+		for i=1 to 3 do (
+			if get_property origMtl ("sss" + i as string + "_weight_rgb") > 0 do (
+				append sss_array i
+			)
+		)
+
+		fn convertReflection r origMtl m_count =(
+			set_property r "reflectionEnable" true
+			copy_property r origMtl "ReflectionColor" ("reflect" + m_count + "_rgb")
+			copy_property r origMtl "ReflectionColorTexmap" ("reflect" + m_count)
+			copy_property r origMtl "ReflectionWeight" ("reflect" + m_count + "_strength_rgb")
+			copy_property r origMtl "ReflectionWeightTexmap" ("reflect" + m_count + "_strength")
+			copy_property r origMtl "ReflectionRoughness" ("reflect" + m_count + "_roughness_rgb")
+			copy_property r origMtl "ReflectionRoughnessTexmap" ("reflect" + m_count + "_roughness")
+			copy_property r origMtl "ReflectionIor" ("reflect" + m_count + "_ior_rgb")
+			copy_property r origMtl "ReflectionIorTexmap" ("reflect" + m_count + "_ior")
+			copy_property r origMtl "ReflectionNormalTexmap" ("reflect" + m_count + "_bump_map")
+		)
+
+		fn convertSSS r origMtl m_count =(
+			set_property r "SssEnable" true
+			copy_property r origMtl "SssColor" ("sss" + m_count + "_color_rgb")
+			copy_property r origMtl "SssColorTexmap" ("sss" + m_count + "_color")
+			copy_property r origMtl "SssWeight" ("sss" + m_count + "_weight_rgb")
+			copy_property r origMtl "SssWeightTexmap" ("sss" + m_count + "_weight")
+			sss_radius = get_property origMtl ("sss" + m_count + "_radius_rgb")
+			set_property r "SssRadius" (point3 sss_radius sss_radius sss_radius)
+			copy_property r origMtl "SssRadiusTexmap" ("sss" + m_count + "_radius")
+		)
+
+		convertReflection r origMtl (refl_array[1] as string)
+		convertSSS r origMtl (sss_array[1] as string)
+
+		for i=2 to 3 do (
+			if refl_array.count >= i or sss_array.count >= i do (
+				uber = RPR_Uber_Material()
+				if refl_array.count >= i do (
+					convertReflection uber origMtl (refl_array[i] as string)
+				)
+				if sss_array.count >= i do (
+					convertSSS uber origMtl (sss_array[i] as string)
+				)
+				
+				old_r = r
+				r = RPR_Blend_Material()
+				r.material1 = old_r
+				r.material2 = uber
+			)
+		)
+		
+		-- logging
+		end_log origMtl
+
+		r
+	)
+
+	PluginMtl = get_property origMtl "plugin"
+	local new_mtl = case PluginMtl of (
+		"BRDFVRayMtl": convertBRDFVRayMtl origMtl
+		"BRDFAlSurface": convertBRDFAlSurface origMtl
+		"BRDFCarPaint": convertBRDFCarPaint origMtl
+		"MtlOverride": convertMtlOverride origMtl
+		"Mtl2Sided": convertMtl2Sided origMtl
+
+		default: origMtl
+	)
+
+	new_mtl
+ 
 )
 
 fn convertVrayLightMtl origMtl =(
@@ -1335,6 +1692,62 @@ fn convertVrayAmbientLight origLight = (
 	r
 )
 
+fn convertTargetLight origLight = (
+
+	if get_property origLight "Distribution" == 3 then (
+		local r = ies_light()
+		r.name = origLight.name + rprPostfixStr
+		
+		-- log to file 
+		start_log origLight r
+
+		-- On/Off, Include/exclude
+		copy_property r origLight "enabled" "on"
+
+		-- position conversion
+		copy_property r origLight "pos" "pos"
+		copy_property r origLight "scale" "scale"
+		copy_property r origLight "pivot" "pivot"
+		copy_property r origLight "transform" "transform"
+		copy_property r origLight "dir" "dir"
+
+		-- rotation XYZ
+		copy_property r origLight "rotationX" "xRotation"
+		copy_property r origLight "rotationY" "yRotation"
+		copy_property r origLight "rotationZ" "zRotation"
+
+		-- ies file
+		if get_property origLight "webfile" != "" and get_property origLight "webfile" != undefined do (
+			plugcfg = GetDir #plugcfg
+			profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
+			makeDir (profile_path)
+			ies_file = get_property origLight "webfile"
+			ies_name = (filterString ies_file "\\")
+			ies_name = ies_name[ies_name.count]
+			copyFile (ies_file) (profile_path + ies_name)
+			set_property r "profile" ies_name
+		)
+
+		-- Intensitiy, Color, Texmap
+		copy_property r origLight "intensity" "intensity"
+		copy_property r origLight "color" "color"
+		copy_property r origLight "temperature" "kelvin"
+
+		if get_property origLight "useKelvin" then (
+			set_property r "colorMode" 0
+		) else (
+			set_property r "colorMode" 1
+		)
+
+		-- logging
+		end_log origLight
+
+		r
+	) else (
+		return origLight
+	)
+)
+
 
 /* 
     SHAPES
@@ -1490,6 +1903,7 @@ fn convertLight orig_light =(
 		VrayIES: errorCatching convertVrayIES orig_light 
 		VraySun: errorCatching convertVraySun orig_light 
 		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
+		Target_Light: errorCatching convertTargetLight orig_light 
 		
 		default: orig_light
 	)
@@ -1546,11 +1960,11 @@ fn convertMaterial orig_mtl =(
 		Vray2SidedMtl: errorCatching convertVray2SidedMtl orig_mtl 
 		VrayMtlWrapper: errorCatching convertVrayMtlWrapper orig_mtl
 		VrayOverrideMtl: errorCatching convertVrayOverrideMtl orig_mtl  
+		VrayScatterVolume: errorCatching convertVrayScatterVolume orig_mtl 
+		VrayALSurfaceMtl: errorCatching convertVrayALSurfaceMtl orig_mtl 
 		
 		--following materials will be replaced with default green rpr uber mat, will be supported later
-		VrayALSurfaceMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayFlakesMtl: errorCatching convertUnsupportedMtl orig_mtl 
-		VrayScatterVolume: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayGLSLMtl: errorCatching convertUnsupportedMtl orig_mtl 
 		VrayHairMtl: convertUnsupportedMtl orig_mtl 
 		VrayHairNextMtl: errorCatching convertUnsupportedMtl orig_mtl 
@@ -1744,7 +2158,7 @@ fn convertScene =(
 	)
 	
 	-- light conversion
-	allLights = for o in objects where superclassof o == light and o.category == #vray collect o
+	allLights = for o in objects where superclassof o == light collect o
 	for i in allLights do convertLight i
 	
 	-- camera conversion
