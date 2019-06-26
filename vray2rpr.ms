@@ -1580,9 +1580,12 @@ fn convertVrayLight origLight = (
 		)
 
 		copy_property r origLight "colourMode" "color_mode"
-		copy_property r origLight "colourPicker" "color"
-		copy_property r origLight "temperature" "color_temperature"
-		copy_property r origLight "TemperatureColour" "color"
+		if get_property origLight "color_mode" then (
+			copy_property r origLight "temperature" "color_temperature"
+			copy_property r origLight "TemperatureColour" "color"
+		) else (
+			copy_property r origLight "colourPicker" "color"
+		)
 
 		if areaShape == 2 or areaShape == 0 do (
 			copy_property r origLight "areaWidths" "sizeLength"
@@ -1716,6 +1719,9 @@ fn convertTargetLight origLight = (
 		copy_property r origLight "rotationY" "yRotation"
 		copy_property r origLight "rotationZ" "zRotation"
 
+		-- rotate rpr ies to match vray ies
+		rotate r (eulerangles -90 0 0)
+
 		-- ies file
 		if get_property origLight "webfile" != "" and get_property origLight "webfile" != undefined do (
 			plugcfg = GetDir #plugcfg
@@ -1804,6 +1810,74 @@ fn convertVrayPlane origShape = (
 	r
 	
 )
+
+
+fn convertVrayEnvironmentFog index = (
+
+	envFog = getAtmospheric index
+
+	volume_material = RPR_Volume_Material()
+	copy_property volume_material envFog "color" "fog_color"
+	copy_property volume_material envFog "colorTexmap" "texmap_fog_color"
+	copy_property volume_material envFog "emissionColor" "fog_emission"
+	copy_property volume_material envFog "emissionColorTexmap" "texmap_fog_emission"
+
+	fog_emission = get_property envFog "fog_emission"
+	remap_emission_weight = color (remap_value fog_emission.red 255 0 1 0) (remap_value fog_emission.green 255 0 1 0) (remap_value fog_emission.blue 255 0 1 0)
+	emission_weight = 0.2126 * remap_emission_weight.red + 0.7152 * remap_emission_weight.green + 0.0722 * remap_emission_weight.blue
+	set_property volume_material "emissionMultiplier" emission_weight
+
+	gizmos = get_property envFog "gizmos"
+	if gizmos.count > 0 then (
+		for gizmo in gizmos do (
+			if classof gizmo == BoxGizmo do (
+				local r = Box()
+
+				copy_property r gizmo "pos" "pos"
+				copy_property r gizmo "scale" "scale"
+				copy_property r gizmo "rotation" "rotation"
+				copy_property r gizmo "height" "height"
+				copy_property r gizmo "length" "length"
+				copy_property r gizmo "width" "width"
+
+				set_property r "material" volume_material
+			)
+			if classof gizmo == SphereGizmo do (
+				local r = Sphere()
+
+				copy_property r gizmo "pos" "pos"
+				copy_property r gizmo "scale" "scale"
+				copy_property r gizmo "rotation" "rotation"
+				copy_property r gizmo "radius" "radius"
+				set_property r "segs" 50
+
+				set_property r "material" volume_material
+			)
+			if classof gizmo == CylGizmo do (
+				local r = Cylinder()
+
+				copy_property r gizmo "pos" "pos"
+				copy_property r gizmo "scale" "scale"
+				copy_property r gizmo "rotation" "rotation"
+				copy_property r gizmo "radius" "radius"
+				copy_property r gizmo "height" "height"
+
+				set_property r "material" volume_material
+			)
+
+
+			delete gizmo
+		)
+	) else (
+		local r = Sphere()
+
+		set_property r "radius" 1000000000.0
+		set_property r "material" volume_material
+	)
+	
+	deleteAtmospheric index
+)
+
 
 fn convertPlane origShape = (
 
@@ -2031,7 +2105,8 @@ fn convertShape orig_shp =(
 		VraySphere: errorCatching convertVraySphere orig_shp
 		VrayPlane: errorCatching convertVrayPlane orig_shp
 		Plane: errorCatching convertPlane orig_shp
-		
+		BoxGizmo: errorCatching convertBoxGizmo orig_shp
+
 		default: orig_shp
 	)
 	
@@ -2067,6 +2142,9 @@ fn convertEnvironment =(
 		useEnvironmentMap = false
 
 	)
+
+	for o=1 to numAtmospherics where classof (getAtmospheric o) == VRayEnvironmentFog do convertVrayEnvironmentFog o
+
 )
 
 fn cleanUpConversionData =(
