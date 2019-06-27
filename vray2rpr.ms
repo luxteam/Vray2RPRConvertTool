@@ -1393,6 +1393,99 @@ fn convertVrayHDRI origMap = (
 	r
 )
 
+fn convertVrayPluginNodeTex origMap =(
+
+	fn convertTexDirt origMap = (
+		if origMap.mode == 0 then (
+			local r = RPR_Ambient_Occlusion()
+			r.name = origMap.name + rprPostfixStr
+			
+			-- log to file 
+			start_log origMap r
+
+			copy_property r origMap "unoccluded_Color" "white_color_rgb"
+			copy_property r origMap "occluded_Color" "black_color_rgb"
+			copy_property r origMap "color0Texmap" "white_color"
+			copy_property r origMap "color1Texmap" "black_color"
+			copy_property r origMap "radius" "radius_rgb"
+
+			-- logging
+			end_log origMap
+
+			r
+		) else (
+			local r = convertUnsupportedUtility origMap
+			r
+		)	
+	)
+
+	fn convertTexDistance origMap = (
+
+		-- log to file 
+		start_log origMap "Bitmap"
+		end_log origMap
+
+		if get_property origMap "near_tex" != undefined do (
+			return (get_property origMap "near_tex")
+		)
+		if get_property origMap "far_tex" != undefined do (
+			return (get_property origMap "far_tex")
+		)
+		if get_property origMap "inside_tex" != undefined do (
+			return (get_property origMap "inside_tex")
+		)
+		if get_property origMap "distance" != undefined do (
+			return (get_property origMap "distance")
+		)
+		if get_property origMap "outside_tex" != undefined do (
+			return (get_property origMap "outside_tex")
+		)
+	)
+
+	fn converTexOCIO origMap = (
+	
+		local r = get_property origMap "basemap"
+
+		-- log to file 
+		start_log origMap r
+		
+		-- logging
+		end_log origMap
+
+		r
+	)
+
+	fn convertTexUserColor origMap = (
+		local r = rpr_color_value()
+		r.name = origMap.name + rprPostfixStr
+
+		-- log to file 
+		start_log origMap r
+		
+		copy_property r origMap "Color" "default_color_rgb"
+		copy_property r origMap "colorTexmap" "default_color"
+
+		-- logging
+		end_log origMap
+
+		r
+	)
+
+	PluginMtl = get_property origMap "plugin"
+	local new_map = case PluginMtl of (
+		"TexDirt": convertTexDirt origMap
+		"TexDistance": convertTexDistance origMap
+		"TexCurvature": convertVrayCurvature origMap
+		"TexOCIO": converTexOCIO origMap
+		"TexUserColor": convertTexUserColor origMap
+
+		default: origMap
+	)
+
+	new_map
+ 
+)
+
 fn convertColorOSL origMap operator = (
 	local r = RPR_Arithmetic()
 	r.name = origMap.name + rprPostfixStr
@@ -2062,6 +2155,7 @@ fn convertMaterial orig_mtl =(
 		VrayUserColor: errorCatching convertVrayUserColor orig_mtl
 		VrayOCIO: errorCatching convertVrayOCIO orig_mtl
 		VrayDistanceTex: errorCatching convertVrayDistanceTex orig_mtl
+		VrayPluginNodeTex: errorCatching convertVrayPluginNodeTex orig_mtl
 		OSLMap: errorCatching convertOSLMap orig_mtl
 
 		--following utilies will be replaced with default rpr arithmetic node, will be supported later
@@ -2076,7 +2170,6 @@ fn convertMaterial orig_mtl =(
 		VrayNoiseTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayOSLText: errorCatching convertUnsupportedUtility orig_mtl
 		VrayParticleTex: errorCatching convertUnsupportedUtility orig_mtl
-		VrayPluginNodeTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayPtex: errorCatching convertUnsupportedUtility orig_mtl
 		VraySamplerInfoTex: errorCatching convertUnsupportedUtility orig_mtl
 		VraySky: errorCatching convertUnsupportedUtility orig_mtl
