@@ -2211,6 +2211,36 @@ fn convertShape orig_shp =(
 	new_shp
 )
 
+fn convertDisplacement obj =(
+	for i=1 to obj.modifiers.count do (
+		if classof obj.modifiers[i] == VRayDisplacementMod do (
+			old_mat = obj.material
+			local new_mat = undefined
+			if old_mat != undefined then (
+				new_mat = convertMaterial old_mat
+			) else (
+				new_mat = RPR_Uber_Material()	
+			)
+			obj.material = new_mat
+			if classof new_mat == RPR_Uber_Material do (
+				displacement = obj.modifiers[i]
+				set_property new_mat "DisplacementEnable" true
+				copy_property new_mat displacement "DisplacementTexmap" "texmap"
+				subdivs = get_property displacement "maxSubdivs"
+				if subdivs > 5 then (
+					set_property new_mat "DisplacementSubdiv" 5
+				) else (
+					copy_property new_mat displacement "DisplacementSubdiv" "maxSubdivs"
+				)
+				set_property new_mat "DisplacementMax" 1
+				set_property new_mat "DisplacementMin" 0
+			)
+
+			deleteModifier obj i
+		)
+	)
+)
+
 fn convertEnvironment =(
 	if useEnvironmentMap and classof environmentMap == VRaySky then (
 
@@ -2301,6 +2331,10 @@ fn convertScene =(
 
 	-- Environment conversion
 	convertEnvironment()
+
+	-- convert displacement
+	objs_array = for i in Geometry where i.modifiers.count > 0 collect i
+	for o in objs_array do convertDisplacement o
 
 	-- shapes conversion
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
