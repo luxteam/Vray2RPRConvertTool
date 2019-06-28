@@ -1799,7 +1799,6 @@ fn convertVrayAmbientLight origLight = (
 )
 
 fn convertTargetLight origLight = (
-
 	if get_property origLight "Distribution" == 3 then (
 		local r = ies_light()
 		r.name = origLight.name + rprPostfixStr
@@ -1860,48 +1859,74 @@ fn convertTargetLight origLight = (
 
 
 fn convertFreeLight origLight = (
-	local r = ies_light()
-	r.name = origLight.name + rprPostfixStr
-	
-	-- log to file 
-	start_log origLight r
+	if get_property origLight "Distribution" == 3 then (
+		local r = ies_light()
+		r.name = origLight.name + rprPostfixStr
+		
+		-- log to file 
+		start_log origLight r
 
-	-- On/Off, Include/exclude
-	copy_property r origLight "enabled" "on"
-	set_property r "targeted" false
+		-- On/Off, Include/exclude
+		copy_property r origLight "enabled" "on"
+		set_property r "targeted" false
 
-	-- position conversion
-	copy_property r origLight "pos" "pos"
-	copy_property r origLight "scale" "scale"
-	copy_property r origLight "pivot" "pivot"
-	copy_property r origLight "transform" "transform"
-	copy_property r origLight "dir" "dir"
+		-- position conversion
+		copy_property r origLight "pos" "pos"
+		copy_property r origLight "scale" "scale"
+		copy_property r origLight "pivot" "pivot"
+		copy_property r origLight "transform" "transform"
+		copy_property r origLight "dir" "dir"
 
-	-- rotation XYZ
-	copy_property r origLight "rotationX" "xRotation"
-	copy_property r origLight "rotationY" "yRotation"
-	copy_property r origLight "rotationZ" "zRotation"
+		-- rotation XYZ
+		copy_property r origLight "rotationX" "xRotation"
+		copy_property r origLight "rotationY" "yRotation"
+		copy_property r origLight "rotationZ" "zRotation"
 
-	-- rotate rpr ies to match vray ies
-	rotate r (eulerangles -90 0 0)
+		-- ies file
+		if get_property origLight "webfile" != "" and get_property origLight "webfile" != undefined do (
+			plugcfg = GetDir #plugcfg
+			profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
+			makeDir (profile_path)
+			ies_file = get_property origLight "webfile"
+			ies_name = (filterString ies_file "\\")
+			ies_name = ies_name[ies_name.count]
+			copyFile (ies_file) (profile_path + ies_name)
+			set_property r "profile" ies_name
+		)
 
-	-- Intensitiy, Color, Texmap
-	copy_property r origLight "intensity" "intensity"
-	copy_property r origLight "color" "color"
-	copy_property r origLight "temperature" "kelvin"
+		-- rotate rpr ies to match vray ies
+		rotate r (eulerangles -90 0 0)
 
-	if get_property origLight "useKelvin" then (
-		set_property r "colorMode" 0
+		-- Intensitiy, Color, Texmap
+		copy_property r origLight "intensity" "intensity"
+		copy_property r origLight "color" "color"
+		copy_property r origLight "temperature" "kelvin"
+
+		if get_property origLight "useKelvin" then (
+			set_property r "colorMode" 0
+		) else (
+			set_property r "colorMode" 1
+		)
+
+		-- logging
+		end_log origLight
+
+		r
 	) else (
-		set_property r "colorMode" 1
+		return origLight
 	)
-
-	-- logging
-	end_log origLight
-
-	r
 )
 
+
+fn convertOmnilight origLight = (
+	set_property origLight "multiplier" ((get_property origLight "multiplier") / 100.0)
+	origLight
+)
+
+fn convertFreeSpot origLight = (
+	set_property origLight "multiplier" ((get_property origLight "multiplier") / 100.0)
+	origLight
+)
 
 /* 
     SHAPES
@@ -2127,6 +2152,8 @@ fn convertLight orig_light =(
 		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
 		Target_Light: errorCatching convertTargetLight orig_light 
 		Free_Light: errorCatching convertFreeLight orig_light 
+		Omnilight: errorCatching convertOmnilight orig_light 
+		freeSpot: errorCatching convertFreeSpot orig_light 
 		
 		default: orig_light
 	)
