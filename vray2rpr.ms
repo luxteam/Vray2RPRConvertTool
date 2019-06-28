@@ -234,7 +234,17 @@ fn defaultEnable rpr_obj rpr_attr orig_obj orig_attr orig_map =(
 )
 
 fn invertMap rpr_obj orig_obj rpr_map orig_map =(
-	if get_property orig_obj orig_map != undefined do (
+	obj_map = get_property orig_obj orig_map
+	if obj_map != undefined do (
+		-- check bitmap texture invert
+		if classof obj_map == Bitmaptexture do (
+			output_node = get_property obj_map "output"
+			if get_property output_node "invert" do (
+				set_property rpr_obj rpr_map obj_map
+				return obj_map
+			)
+		)
+		-- invert via rpr arithmetic
 		arith = RPR_Arithmetic()
 		set_property arith "operator" 1
 		set_property arith "Color1" (color 255 255 255)
@@ -1799,6 +1809,7 @@ fn convertTargetLight origLight = (
 
 		-- On/Off, Include/exclude
 		copy_property r origLight "enabled" "on"
+		set_property r "targeted" false
 
 		-- position conversion
 		copy_property r origLight "pos" "pos"
@@ -1845,6 +1856,50 @@ fn convertTargetLight origLight = (
 	) else (
 		return origLight
 	)
+)
+
+
+fn convertFreeLight origLight = (
+	local r = ies_light()
+	r.name = origLight.name + rprPostfixStr
+	
+	-- log to file 
+	start_log origLight r
+
+	-- On/Off, Include/exclude
+	copy_property r origLight "enabled" "on"
+	set_property r "targeted" false
+
+	-- position conversion
+	copy_property r origLight "pos" "pos"
+	copy_property r origLight "scale" "scale"
+	copy_property r origLight "pivot" "pivot"
+	copy_property r origLight "transform" "transform"
+	copy_property r origLight "dir" "dir"
+
+	-- rotation XYZ
+	copy_property r origLight "rotationX" "xRotation"
+	copy_property r origLight "rotationY" "yRotation"
+	copy_property r origLight "rotationZ" "zRotation"
+
+	-- rotate rpr ies to match vray ies
+	rotate r (eulerangles -90 0 0)
+
+	-- Intensitiy, Color, Texmap
+	copy_property r origLight "intensity" "intensity"
+	copy_property r origLight "color" "color"
+	copy_property r origLight "temperature" "kelvin"
+
+	if get_property origLight "useKelvin" then (
+		set_property r "colorMode" 0
+	) else (
+		set_property r "colorMode" 1
+	)
+
+	-- logging
+	end_log origLight
+
+	r
 )
 
 
@@ -2071,6 +2126,7 @@ fn convertLight orig_light =(
 		VraySun: errorCatching convertVraySun orig_light 
 		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
 		Target_Light: errorCatching convertTargetLight orig_light 
+		Free_Light: errorCatching convertFreeLight orig_light 
 		
 		default: orig_light
 	)
