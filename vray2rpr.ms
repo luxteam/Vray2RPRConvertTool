@@ -234,7 +234,17 @@ fn defaultEnable rpr_obj rpr_attr orig_obj orig_attr orig_map =(
 )
 
 fn invertMap rpr_obj orig_obj rpr_map orig_map =(
-	if get_property orig_obj orig_map != undefined do (
+	obj_map = get_property orig_obj orig_map
+	if obj_map != undefined do (
+		-- check bitmap texture invert
+		if classof obj_map == Bitmaptexture do (
+			output_node = get_property obj_map "output"
+			if get_property output_node "invert" do (
+				set_property rpr_obj rpr_map obj_map
+				return obj_map
+			)
+		)
+		-- invert via rpr arithmetic
 		arith = RPR_Arithmetic()
 		set_property arith "operator" 1
 		set_property arith "Color1" (color 255 255 255)
@@ -1393,6 +1403,99 @@ fn convertVrayHDRI origMap = (
 	r
 )
 
+fn convertVrayPluginNodeTex origMap =(
+
+	fn convertTexDirt origMap = (
+		if origMap.mode == 0 then (
+			local r = RPR_Ambient_Occlusion()
+			r.name = origMap.name + rprPostfixStr
+			
+			-- log to file 
+			start_log origMap r
+
+			copy_property r origMap "unoccluded_Color" "white_color_rgb"
+			copy_property r origMap "occluded_Color" "black_color_rgb"
+			copy_property r origMap "color0Texmap" "white_color"
+			copy_property r origMap "color1Texmap" "black_color"
+			copy_property r origMap "radius" "radius_rgb"
+
+			-- logging
+			end_log origMap
+
+			r
+		) else (
+			local r = convertUnsupportedUtility origMap
+			r
+		)	
+	)
+
+	fn convertTexDistance origMap = (
+
+		-- log to file 
+		start_log origMap "Bitmap"
+		end_log origMap
+
+		if get_property origMap "near_tex" != undefined do (
+			return (get_property origMap "near_tex")
+		)
+		if get_property origMap "far_tex" != undefined do (
+			return (get_property origMap "far_tex")
+		)
+		if get_property origMap "inside_tex" != undefined do (
+			return (get_property origMap "inside_tex")
+		)
+		if get_property origMap "distance" != undefined do (
+			return (get_property origMap "distance")
+		)
+		if get_property origMap "outside_tex" != undefined do (
+			return (get_property origMap "outside_tex")
+		)
+	)
+
+	fn converTexOCIO origMap = (
+	
+		local r = get_property origMap "basemap"
+
+		-- log to file 
+		start_log origMap r
+		
+		-- logging
+		end_log origMap
+
+		r
+	)
+
+	fn convertTexUserColor origMap = (
+		local r = rpr_color_value()
+		r.name = origMap.name + rprPostfixStr
+
+		-- log to file 
+		start_log origMap r
+		
+		copy_property r origMap "Color" "default_color_rgb"
+		copy_property r origMap "colorTexmap" "default_color"
+
+		-- logging
+		end_log origMap
+
+		r
+	)
+
+	PluginMtl = get_property origMap "plugin"
+	local new_map = case PluginMtl of (
+		"TexDirt": convertTexDirt origMap
+		"TexDistance": convertTexDistance origMap
+		"TexCurvature": convertVrayCurvature origMap
+		"TexOCIO": converTexOCIO origMap
+		"TexUserColor": convertTexUserColor origMap
+
+		default: origMap
+	)
+
+	new_map
+ 
+)
+
 fn convertColorOSL origMap operator = (
 	local r = RPR_Arithmetic()
 	r.name = origMap.name + rprPostfixStr
@@ -1580,9 +1683,12 @@ fn convertVrayLight origLight = (
 		)
 
 		copy_property r origLight "colourMode" "color_mode"
-		copy_property r origLight "colourPicker" "color"
-		copy_property r origLight "temperature" "color_temperature"
-		copy_property r origLight "TemperatureColour" "color"
+		if get_property origLight "color_mode" then (
+			copy_property r origLight "temperature" "color_temperature"
+			copy_property r origLight "TemperatureColour" "color"
+		) else (
+			copy_property r origLight "colourPicker" "color"
+		)
 
 		if areaShape == 2 or areaShape == 0 do (
 			copy_property r origLight "areaWidths" "sizeLength"
@@ -1693,7 +1799,6 @@ fn convertVrayAmbientLight origLight = (
 )
 
 fn convertTargetLight origLight = (
-
 	if get_property origLight "Distribution" == 3 then (
 		local r = ies_light()
 		r.name = origLight.name + rprPostfixStr
@@ -1703,6 +1808,7 @@ fn convertTargetLight origLight = (
 
 		-- On/Off, Include/exclude
 		copy_property r origLight "enabled" "on"
+		set_property r "targeted" false
 
 		-- position conversion
 		copy_property r origLight "pos" "pos"
@@ -1715,6 +1821,9 @@ fn convertTargetLight origLight = (
 		copy_property r origLight "rotationX" "xRotation"
 		copy_property r origLight "rotationY" "yRotation"
 		copy_property r origLight "rotationZ" "zRotation"
+
+		-- rotate rpr ies to match vray ies
+		rotate r (eulerangles -90 0 0)
 
 		-- ies file
 		if get_property origLight "webfile" != "" and get_property origLight "webfile" != undefined do (
@@ -1748,6 +1857,76 @@ fn convertTargetLight origLight = (
 	)
 )
 
+
+fn convertFreeLight origLight = (
+	if get_property origLight "Distribution" == 3 then (
+		local r = ies_light()
+		r.name = origLight.name + rprPostfixStr
+		
+		-- log to file 
+		start_log origLight r
+
+		-- On/Off, Include/exclude
+		copy_property r origLight "enabled" "on"
+		set_property r "targeted" false
+
+		-- position conversion
+		copy_property r origLight "pos" "pos"
+		copy_property r origLight "scale" "scale"
+		copy_property r origLight "pivot" "pivot"
+		copy_property r origLight "transform" "transform"
+		copy_property r origLight "dir" "dir"
+
+		-- rotation XYZ
+		copy_property r origLight "rotationX" "xRotation"
+		copy_property r origLight "rotationY" "yRotation"
+		copy_property r origLight "rotationZ" "zRotation"
+
+		-- ies file
+		if get_property origLight "webfile" != "" and get_property origLight "webfile" != undefined do (
+			plugcfg = GetDir #plugcfg
+			profile_path = plugcfg + "\\Radeon ProRender\\IES Profiles\\"
+			makeDir (profile_path)
+			ies_file = get_property origLight "webfile"
+			ies_name = (filterString ies_file "\\")
+			ies_name = ies_name[ies_name.count]
+			copyFile (ies_file) (profile_path + ies_name)
+			set_property r "profile" ies_name
+		)
+
+		-- rotate rpr ies to match vray ies
+		rotate r (eulerangles -90 0 0)
+
+		-- Intensitiy, Color, Texmap
+		copy_property r origLight "intensity" "intensity"
+		copy_property r origLight "color" "color"
+		copy_property r origLight "temperature" "kelvin"
+
+		if get_property origLight "useKelvin" then (
+			set_property r "colorMode" 0
+		) else (
+			set_property r "colorMode" 1
+		)
+
+		-- logging
+		end_log origLight
+
+		r
+	) else (
+		return origLight
+	)
+)
+
+
+fn convertOmnilight origLight = (
+	set_property origLight "multiplier" ((get_property origLight "multiplier") / 100.0)
+	origLight
+)
+
+fn convertFreeSpot origLight = (
+	set_property origLight "multiplier" ((get_property origLight "multiplier") / 100.0)
+	origLight
+)
 
 /* 
     SHAPES
@@ -1804,6 +1983,74 @@ fn convertVrayPlane origShape = (
 	r
 	
 )
+
+
+fn convertVrayEnvironmentFog index = (
+
+	envFog = getAtmospheric index
+
+	volume_material = RPR_Volume_Material()
+	copy_property volume_material envFog "color" "fog_color"
+	copy_property volume_material envFog "colorTexmap" "texmap_fog_color"
+	copy_property volume_material envFog "emissionColor" "fog_emission"
+	copy_property volume_material envFog "emissionColorTexmap" "texmap_fog_emission"
+
+	fog_emission = get_property envFog "fog_emission"
+	remap_emission_weight = color (remap_value fog_emission.red 255 0 1 0) (remap_value fog_emission.green 255 0 1 0) (remap_value fog_emission.blue 255 0 1 0)
+	emission_weight = 0.2126 * remap_emission_weight.red + 0.7152 * remap_emission_weight.green + 0.0722 * remap_emission_weight.blue
+	set_property volume_material "emissionMultiplier" emission_weight
+
+	gizmos = get_property envFog "gizmos"
+	if gizmos.count > 0 then (
+		for gizmo in gizmos do (
+			if classof gizmo == BoxGizmo do (
+				local r = Box()
+
+				copy_property r gizmo "pos" "pos"
+				copy_property r gizmo "scale" "scale"
+				copy_property r gizmo "rotation" "rotation"
+				copy_property r gizmo "height" "height"
+				copy_property r gizmo "length" "length"
+				copy_property r gizmo "width" "width"
+
+				set_property r "material" volume_material
+			)
+			if classof gizmo == SphereGizmo do (
+				local r = Sphere()
+
+				copy_property r gizmo "pos" "pos"
+				copy_property r gizmo "scale" "scale"
+				copy_property r gizmo "rotation" "rotation"
+				copy_property r gizmo "radius" "radius"
+				set_property r "segs" 50
+
+				set_property r "material" volume_material
+			)
+			if classof gizmo == CylGizmo do (
+				local r = Cylinder()
+
+				copy_property r gizmo "pos" "pos"
+				copy_property r gizmo "scale" "scale"
+				copy_property r gizmo "rotation" "rotation"
+				copy_property r gizmo "radius" "radius"
+				copy_property r gizmo "height" "height"
+
+				set_property r "material" volume_material
+			)
+
+
+			delete gizmo
+		)
+	) else (
+		local r = Sphere()
+
+		set_property r "radius" 1000000000.0
+		set_property r "material" volume_material
+	)
+	
+	deleteAtmospheric index
+)
+
 
 fn convertPlane origShape = (
 
@@ -1904,6 +2151,9 @@ fn convertLight orig_light =(
 		VraySun: errorCatching convertVraySun orig_light 
 		VrayAmbientLight: errorCatching convertVrayAmbientLight orig_light 
 		Target_Light: errorCatching convertTargetLight orig_light 
+		Free_Light: errorCatching convertFreeLight orig_light 
+		Omnilight: errorCatching convertOmnilight orig_light 
+		freeSpot: errorCatching convertFreeSpot orig_light 
 		
 		default: orig_light
 	)
@@ -1988,6 +2238,7 @@ fn convertMaterial orig_mtl =(
 		VrayUserColor: errorCatching convertVrayUserColor orig_mtl
 		VrayOCIO: errorCatching convertVrayOCIO orig_mtl
 		VrayDistanceTex: errorCatching convertVrayDistanceTex orig_mtl
+		VrayPluginNodeTex: errorCatching convertVrayPluginNodeTex orig_mtl
 		OSLMap: errorCatching convertOSLMap orig_mtl
 
 		--following utilies will be replaced with default rpr arithmetic node, will be supported later
@@ -2002,7 +2253,6 @@ fn convertMaterial orig_mtl =(
 		VrayNoiseTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayOSLText: errorCatching convertUnsupportedUtility orig_mtl
 		VrayParticleTex: errorCatching convertUnsupportedUtility orig_mtl
-		VrayPluginNodeTex: errorCatching convertUnsupportedUtility orig_mtl
 		VrayPtex: errorCatching convertUnsupportedUtility orig_mtl
 		VraySamplerInfoTex: errorCatching convertUnsupportedUtility orig_mtl
 		VraySky: errorCatching convertUnsupportedUtility orig_mtl
@@ -2031,7 +2281,8 @@ fn convertShape orig_shp =(
 		VraySphere: errorCatching convertVraySphere orig_shp
 		VrayPlane: errorCatching convertVrayPlane orig_shp
 		Plane: errorCatching convertPlane orig_shp
-		
+		BoxGizmo: errorCatching convertBoxGizmo orig_shp
+
 		default: orig_shp
 	)
 	
@@ -2041,6 +2292,36 @@ fn convertShape orig_shp =(
 	)
 	
 	new_shp
+)
+
+fn convertDisplacement obj =(
+	for i=1 to obj.modifiers.count do (
+		if classof obj.modifiers[i] == VRayDisplacementMod do (
+			old_mat = obj.material
+			local new_mat = undefined
+			if old_mat != undefined then (
+				new_mat = convertMaterial old_mat
+			) else (
+				new_mat = RPR_Uber_Material()	
+			)
+			obj.material = new_mat
+			if classof new_mat == RPR_Uber_Material do (
+				displacement = obj.modifiers[i]
+				set_property new_mat "DisplacementEnable" true
+				copy_property new_mat displacement "DisplacementTexmap" "texmap"
+				subdivs = get_property displacement "maxSubdivs"
+				if subdivs > 5 then (
+					set_property new_mat "DisplacementSubdiv" 5
+				) else (
+					copy_property new_mat displacement "DisplacementSubdiv" "maxSubdivs"
+				)
+				set_property new_mat "DisplacementMax" 1
+				set_property new_mat "DisplacementMin" 0
+			)
+
+			deleteModifier obj i
+		)
+	)
 )
 
 fn convertEnvironment =(
@@ -2067,6 +2348,9 @@ fn convertEnvironment =(
 		useEnvironmentMap = false
 
 	)
+
+	for o=1 to numAtmospherics where classof (getAtmospheric o) == VRayEnvironmentFog do convertVrayEnvironmentFog o
+
 )
 
 fn cleanUpConversionData =(
@@ -2130,6 +2414,10 @@ fn convertScene =(
 
 	-- Environment conversion
 	convertEnvironment()
+
+	-- convert displacement
+	objs_array = for i in Geometry where i.modifiers.count > 0 collect i
+	for o in objs_array do convertDisplacement o
 
 	-- shapes conversion
 	vrayShapeInstances = for i in Geometry where classOf i == VrayPlane or classOf i == VraySphere or classOf i == Plane collect i
