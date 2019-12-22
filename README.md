@@ -1,10 +1,15 @@
-# Vray to RadeonProRender Converter (Maya)
+#Vray to RadeonProRender Converter
 
 	History:         
-	v.1.0 - First release          
+	v.1.0 - first release          
         
 	Supported materials:          
-	- VrayMtl
-	- VrayBumpMtl
-
-
+	- VrayMtl          
+	- VrayLightMtl             
+	- VrayCarPaintMtl            
+	- VrayBlendMtl             
+      
+	Supported utilities:           
+	- VrayComptex           
+	- VrayBump2Normal      
+	- VrayColor     
