@@ -1,38 +1,15 @@
 
 /*
-
-	Vray to RadeonProRender Converter
-
-	History:
-	v.1.0 - first release
-	v.1.1 - VrayDirt, VrayNormalMap 
-	v.1.2 - VraySun, VrayPhysicalCamera
-	v.1.3 - VrayHDRI
-
-	Supported materials:
-	- VrayMtl
-	- VrayLightMtl
-	- VrayCarPaintMtl
-	- VrayBlendMtl
-	- VrayPluginNodeMtl (VrayMtl)
-
-	Supported utilities:
-	- VrayComptex
-	- VrayBump2Normal
-	- VrayColor
-	- VrayDirt
-	- VrayNormalMap
-	- VrayHDRI
-	- VrayCurvature
-
-	Supported lights:
-	- VrayLight
-	- VrayIES
-	- VraySun
-
-	Supported cameras:
-	- VrayPhysicalCamera
-
+# Copyright 2020 Advanced Micro Devices, Inc
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#    http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 */
 
 orig_shps=#()
@@ -43,6 +20,8 @@ orig_lights=#()
 new_lights=#()
 orig_cameras=#()
 new_cameras=#()
+
+VR2RPR_CONVERTER_VERSION = "3.0.1"
 
 unsupportedPostfixStr = "_unsupported"
 rprPostfixStr = "_rpr"
@@ -73,27 +52,6 @@ fn write_converted_property_log rpr_obj conv_obj rpr_attr conv_attr =(
 		print("Exception:" + getCurrentException())
 		print("Stack trace: " + getCurrentExceptionStackTrace())
 	)
-)
-
-fn startConversion =(
-	msg = "START CONVERSION.\r\n"
-	msg += "Start time: " + (localtime as string) + "\r\n"
-
-	try (
-		log_obj = openFile log_file mode: "w"
-		format "%" (msg as string) to: log_obj
-		flush log_obj
-		close log_obj
-		free log_obj
-	) catch ()
-
-)
-
-fn finishConversion time =(
-	msg = "\n\nCONVERSION IS FINISHED.\r\n"
-	msg += "Total time: " + (time as string) + " seconds.\r\n"
-
-	write_own_property_log msg
 )
 
 fn start_log conv_obj rpr_obj =(
@@ -2405,9 +2363,9 @@ fn checkPluginExists =(
 
 fn convertScene =(
 	
-	start = timeStamp()
+	print("Conversion start! Converter version: " + VR2RPR_CONVERTER_VERSION)
 
-	startConversion()
+	start = timeStamp()
 
 	vr = vray()
 	if classof renderers.current != classof vr do renderers.current = vr
@@ -2477,7 +2435,6 @@ fn convertScene =(
 	total_time = (end - start) / 1000.0
 	print("Scene conversion took " + total_time as string + " seconds.")
 	print("Converted: " + new_mtls.count as string + " materials, " + new_lights.count as string + " lights.")
-	finishConversion total_time
 
 	cleanUpConversionData()
 	
